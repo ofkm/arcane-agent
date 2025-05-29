@@ -41,23 +41,43 @@ func New(cfg *config.Config) *Agent {
 }
 
 func (a *Agent) Start(ctx context.Context) error {
+	reconnectAttempts := 0
+	maxReconnectAttempts := 10
+
 	for {
 		select {
 		case <-ctx.Done():
+			log.Printf("Agent start context cancelled")
 			a.cleanup()
 			return nil
 		default:
+			reconnectAttempts++
+			log.Printf("Connection attempt %d/%d", reconnectAttempts, maxReconnectAttempts)
+
 			if err := a.connect(); err != nil {
-				log.Printf("Connection failed: %v", err)
+				log.Printf("Connection failed (attempt %d): %v", reconnectAttempts, err)
+
+				if reconnectAttempts >= maxReconnectAttempts {
+					log.Printf("Max reconnection attempts reached, giving up")
+					return fmt.Errorf("failed to connect after %d attempts", maxReconnectAttempts)
+				}
+
 				time.Sleep(a.config.ReconnectDelay)
 				continue
 			}
+
+			log.Printf("Connected successfully, resetting reconnect attempts")
+			reconnectAttempts = 0
 
 			if err := a.handleConnection(); err != nil {
 				log.Printf("Connection error: %v", err)
 			}
 
+			log.Printf("Disconnecting...")
 			a.disconnect()
+
+			// Don't reconnect immediately, wait a bit
+			log.Printf("Waiting %v before reconnecting...", a.config.ReconnectDelay)
 			time.Sleep(a.config.ReconnectDelay)
 		}
 	}
@@ -110,26 +130,35 @@ func (a *Agent) handleConnection() error {
 	connCtx, connCancel := context.WithCancel(a.ctx)
 	defer connCancel()
 
-	// Start heartbeat goroutine
+	// Channel to signal when heartbeat goroutine should stop
+	heartbeatDone := make(chan struct{})
+
+	// Start heartbeat goroutine with better error handling
 	go func() {
+		defer close(heartbeatDone)
 		for {
 			select {
 			case <-connCtx.Done():
+				log.Printf("Heartbeat goroutine: connection context cancelled")
 				return
 			case <-heartbeatTicker.C:
+				log.Printf("Sending heartbeat...")
 				if err := a.sendHeartbeat(); err != nil {
 					log.Printf("Failed to send heartbeat: %v", err)
 					connCancel()
 					return
 				}
+				log.Printf("Heartbeat sent successfully")
 			}
 		}
 	}()
 
-	// Main message reading loop
+	// Main message reading loop with better error handling
 	for {
 		select {
 		case <-connCtx.Done():
+			log.Printf("Connection context cancelled, waiting for heartbeat goroutine...")
+			<-heartbeatDone // Wait for heartbeat goroutine to finish
 			return nil
 		default:
 			a.mu.RLock()
@@ -137,11 +166,13 @@ func (a *Agent) handleConnection() error {
 			a.mu.RUnlock()
 
 			if conn == nil {
+				log.Printf("Connection is nil, returning error")
 				return fmt.Errorf("connection is nil")
 			}
 
 			// Set read deadline to avoid blocking forever
-			conn.SetReadDeadline(time.Now().Add(time.Second * 30))
+			deadline := time.Now().Add(5 * time.Second) // Shorter deadline
+			conn.SetReadDeadline(deadline)
 
 			var msg Message
 			err := conn.ReadJSON(&msg)
@@ -150,23 +181,35 @@ func (a *Agent) handleConnection() error {
 			conn.SetReadDeadline(time.Time{})
 
 			if err != nil {
-				// Check if it's a timeout or connection closed
+				// Check if context was cancelled first
+				if connCtx.Err() != nil {
+					log.Printf("Connection cancelled during read")
+					return nil
+				}
+
+				// Check for timeout
+				if netErr, ok := err.(interface{ Timeout() bool }); ok && netErr.Timeout() {
+					// Timeout is expected, continue
+					continue
+				}
+
+				// Check for normal close
 				if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
 					log.Printf("WebSocket closed normally: %v", err)
 					return nil
 				}
+
+				// Check for unexpected close
 				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 					log.Printf("WebSocket closed unexpectedly: %v", err)
 					return err
 				}
-				// For timeout errors, continue the loop
-				if netErr, ok := err.(interface{ Timeout() bool }); ok && netErr.Timeout() {
-					continue
-				}
-				log.Printf("Error reading message: %v", err)
+
+				log.Printf("Error reading message: %v (type: %T)", err, err)
 				return err
 			}
 
+			log.Printf("Received message: %+v", msg)
 			if err := a.handleMessage(msg); err != nil {
 				log.Printf("Error handling message: %v", err)
 			}
@@ -422,12 +465,27 @@ func (a *Agent) sendMessage(msg Message) error {
 		return fmt.Errorf("connection is nil")
 	}
 
+	// Check if context is cancelled
+	if a.ctx.Err() != nil {
+		return fmt.Errorf("context cancelled")
+	}
+
 	// Set write deadline
-	conn.SetWriteDeadline(time.Now().Add(time.Second * 10))
+	deadline := time.Now().Add(10 * time.Second)
+	conn.SetWriteDeadline(deadline)
+
 	err := conn.WriteJSON(msg)
+
+	// Clear the deadline
 	conn.SetWriteDeadline(time.Time{})
 
-	return err
+	if err != nil {
+		log.Printf("Failed to send message type %s: %v", msg.Type, err)
+		return err
+	}
+
+	log.Printf("Successfully sent message type: %s", msg.Type)
+	return nil
 }
 
 func (a *Agent) disconnect() {
@@ -451,4 +509,19 @@ func getHostname() string {
 		return "unknown"
 	}
 	return hostname
+}
+
+func (a *Agent) isConnectionHealthy() bool {
+	a.mu.RLock()
+	conn := a.conn
+	a.mu.RUnlock()
+
+	if conn == nil {
+		return false
+	}
+
+	// Try to send a ping frame to check connection health
+	deadline := time.Now().Add(5 * time.Second)
+	err := conn.WriteControl(websocket.PingMessage, []byte{}, deadline)
+	return err == nil
 }

@@ -167,6 +167,8 @@ data/
 *.db
 *.sqlite
 *.sqlite3
+.agent_id
+.arcane-agent/
 
 # Certificate files
 *.pem

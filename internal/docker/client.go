@@ -230,3 +230,74 @@ func (c *Client) ComposeDown(ctx context.Context, composeFile string) (interface
 		"output":       string(output),
 	}, nil
 }
+
+// GetMetrics collects various Docker metrics
+func (c *Client) GetMetrics(ctx context.Context) (interface{}, error) {
+	metrics := make(map[string]interface{})
+
+	// Get container count
+	if containerResult, err := c.ListContainers(ctx); err == nil {
+		if containerMap, ok := containerResult.(map[string]interface{}); ok {
+			if containers, ok := containerMap["containers"].([]interface{}); ok {
+				metrics["containerCount"] = len(containers)
+			}
+		}
+	} else {
+		metrics["containerCount"] = 0
+	}
+
+	// Get image count
+	if imageResult, err := c.ListImages(ctx); err == nil {
+		if imageMap, ok := imageResult.(map[string]interface{}); ok {
+			if images, ok := imageMap["images"].([]interface{}); ok {
+				metrics["imageCount"] = len(images)
+			}
+		}
+	} else {
+		metrics["imageCount"] = 0
+	}
+
+	// Get stack count (using docker stack ls)
+	if stackOutput, err := c.ExecuteCommand("stack", []string{"ls", "--format", "json"}); err == nil {
+		lines := strings.Split(strings.TrimSpace(stackOutput), "\n")
+		stackCount := 0
+		for _, line := range lines {
+			if strings.TrimSpace(line) != "" {
+				stackCount++
+			}
+		}
+		metrics["stackCount"] = stackCount
+	} else {
+		metrics["stackCount"] = 0
+	}
+
+	// Get network count
+	if networkOutput, err := c.ExecuteCommand("network", []string{"ls", "--format", "json"}); err == nil {
+		lines := strings.Split(strings.TrimSpace(networkOutput), "\n")
+		networkCount := 0
+		for _, line := range lines {
+			if strings.TrimSpace(line) != "" {
+				networkCount++
+			}
+		}
+		metrics["networkCount"] = networkCount
+	} else {
+		metrics["networkCount"] = 0
+	}
+
+	// Get volume count
+	if volumeOutput, err := c.ExecuteCommand("volume", []string{"ls", "--format", "json"}); err == nil {
+		lines := strings.Split(strings.TrimSpace(volumeOutput), "\n")
+		volumeCount := 0
+		for _, line := range lines {
+			if strings.TrimSpace(line) != "" {
+				volumeCount++
+			}
+		}
+		metrics["volumeCount"] = volumeCount
+	} else {
+		metrics["volumeCount"] = 0
+	}
+
+	return metrics, nil
+}

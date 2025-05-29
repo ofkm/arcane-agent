@@ -149,3 +149,36 @@ func TestGetContainerLogs(t *testing.T) {
 		t.Error("Expected error for non-existent container")
 	}
 }
+
+func TestGetMetrics(t *testing.T) {
+	client := NewClient()
+	ctx := context.Background()
+
+	result, err := client.GetMetrics(ctx)
+
+	// Skip test if Docker not available
+	if err != nil {
+		t.Logf("Docker not available: %v", err)
+		return
+	}
+
+	metricsMap, ok := result.(map[string]interface{})
+	if !ok {
+		t.Error("Expected result to be a map")
+		return
+	}
+
+	expectedKeys := []string{"containerCount", "imageCount", "stackCount", "networkCount", "volumeCount"}
+	for _, key := range expectedKeys {
+		if _, exists := metricsMap[key]; !exists {
+			t.Errorf("Expected '%s' key in metrics", key)
+		}
+	}
+
+	// Verify all values are numbers
+	for key, value := range metricsMap {
+		if _, ok := value.(int); !ok {
+			t.Errorf("Expected %s to be an integer, got %T", key, value)
+		}
+	}
+}

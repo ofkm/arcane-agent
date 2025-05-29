@@ -88,10 +88,23 @@ func (h *HTTPClient) registerAgent() error {
 }
 
 func (h *HTTPClient) sendHeartbeat() error {
+	// Get current metrics
+	metrics, err := h.taskManager.ExecuteTask("metrics", map[string]interface{}{})
+	if err != nil {
+		metrics = map[string]interface{}{
+			"containerCount": 0,
+			"imageCount":     0,
+			"stackCount":     0,
+			"networkCount":   0,
+			"volumeCount":    0,
+		}
+	}
+
 	heartbeatData := map[string]interface{}{
 		"agent_id":  h.config.AgentID,
 		"status":    "online",
-		"timestamp": time.Now(),
+		"timestamp": time.Now().Unix(),
+		"metrics":   metrics,
 	}
 
 	return h.makeRequest("POST", "/api/agents/heartbeat", heartbeatData, nil)

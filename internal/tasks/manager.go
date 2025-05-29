@@ -38,6 +38,8 @@ func (m *Manager) ExecuteTask(taskType string, payload map[string]interface{}) (
 		return m.listImages(ctx, payload)
 	case "system_info":
 		return m.getSystemInfo(ctx, payload)
+	case "metrics":
+		return m.getMetrics(ctx, payload)
 	default:
 		return nil, fmt.Errorf("unknown task type: %s", taskType)
 	}
@@ -117,4 +119,8 @@ func (m *Manager) listImages(ctx context.Context, payload map[string]interface{}
 
 func (m *Manager) getSystemInfo(ctx context.Context, payload map[string]interface{}) (interface{}, error) {
 	return m.dockerClient.GetSystemInfo(ctx)
+}
+
+func (m *Manager) getMetrics(ctx context.Context, payload map[string]interface{}) (interface{}, error) {
+	return m.dockerClient.GetMetrics(ctx)
 }

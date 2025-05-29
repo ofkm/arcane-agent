@@ -196,3 +196,34 @@ func TestExecuteDockerCommand(t *testing.T) {
 		})
 	}
 }
+
+func TestExecuteMetricsTask(t *testing.T) {
+	dockerClient := docker.NewClient()
+	manager := NewManager(dockerClient)
+
+	result, err := manager.ExecuteTask("metrics", map[string]interface{}{})
+
+	// May fail if Docker not available, but structure should be correct
+	if err != nil {
+		t.Logf("Metrics task failed (likely Docker not available): %v", err)
+		return
+	}
+
+	if result == nil {
+		t.Error("Expected non-nil result for metrics task")
+		return
+	}
+
+	metricsMap, ok := result.(map[string]interface{})
+	if !ok {
+		t.Error("Expected metrics result to be a map")
+		return
+	}
+
+	expectedKeys := []string{"containerCount", "imageCount", "stackCount", "networkCount", "volumeCount"}
+	for _, key := range expectedKeys {
+		if _, exists := metricsMap[key]; !exists {
+			t.Errorf("Expected '%s' key in metrics", key)
+		}
+	}
+}

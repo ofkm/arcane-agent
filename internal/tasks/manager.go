@@ -105,12 +105,39 @@ func (m *Manager) listContainers(ctx context.Context, payload map[string]interfa
 }
 
 func (m *Manager) pullImage(ctx context.Context, payload map[string]interface{}) (interface{}, error) {
-	image, ok := payload["image"].(string)
-	if !ok {
-		return nil, fmt.Errorf("missing image")
+	// Try "imageName" first (new format), fallback to "image" for compatibility
+	var image string
+	var ok bool
+
+	if image, ok = payload["imageName"].(string); !ok {
+		if image, ok = payload["image"].(string); !ok {
+			return nil, fmt.Errorf("missing imageName or image")
+		}
 	}
 
-	return m.dockerClient.PullImage(ctx, image)
+	result, err := m.dockerClient.PullImage(ctx, image)
+	if err != nil {
+		return map[string]interface{}{
+			"status": "failed",
+			"error":  fmt.Sprintf("Failed to pull image %s: %v", image, err),
+		}, nil
+	}
+
+	// Extract the output from the docker client result
+	var output string
+	if resultMap, ok := result.(map[string]interface{}); ok {
+		if outputStr, exists := resultMap["output"]; exists {
+			output = fmt.Sprintf("%v", outputStr)
+		}
+	}
+
+	return map[string]interface{}{
+		"status": "completed",
+		"result": map[string]interface{}{
+			"output": output,
+			"image":  image,
+		},
+	}, nil
 }
 
 func (m *Manager) listImages(ctx context.Context, payload map[string]interface{}) (interface{}, error) {

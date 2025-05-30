@@ -28,20 +28,20 @@ type Agent struct {
 func New(cfg *config.Config) *Agent {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	agent := &Agent{
-		config:    cfg,
-		ctx:       ctx,
-		cancel:    cancel,
-		shutdown:  make(chan struct{}),
-		startTime: time.Now(),
+	dockerClient := docker.NewClient()
+	taskManager := tasks.NewManager(dockerClient, cfg)
+	httpClient := NewHTTPClient(cfg, taskManager)
+
+	return &Agent{
+		config:       cfg,
+		httpClient:   httpClient,
+		dockerClient: dockerClient,
+		taskManager:  taskManager,
+		ctx:          ctx,
+		cancel:       cancel,
+		shutdown:     make(chan struct{}),
+		startTime:    time.Now(),
 	}
-
-	// Initialize components in correct order
-	agent.dockerClient = docker.NewClient()
-	agent.taskManager = tasks.NewManager(agent.dockerClient)
-	agent.httpClient = NewHTTPClient(cfg, agent.taskManager)
-
-	return agent
 }
 
 func (a *Agent) Start() error {

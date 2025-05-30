@@ -10,12 +10,13 @@ import (
 func TestLoad(t *testing.T) {
 	// Save original env vars
 	originalEnv := map[string]string{
-		"ARCANE_HOST":     os.Getenv("ARCANE_HOST"),
-		"ARCANE_PORT":     os.Getenv("ARCANE_PORT"),
-		"AGENT_ID":        os.Getenv("AGENT_ID"),
-		"RECONNECT_DELAY": os.Getenv("RECONNECT_DELAY"),
-		"HEARTBEAT_RATE":  os.Getenv("HEARTBEAT_RATE"),
-		"TLS_ENABLED":     os.Getenv("TLS_ENABLED"),
+		"ARCANE_HOST":       os.Getenv("ARCANE_HOST"),
+		"ARCANE_PORT":       os.Getenv("ARCANE_PORT"),
+		"AGENT_ID":          os.Getenv("AGENT_ID"),
+		"RECONNECT_DELAY":   os.Getenv("RECONNECT_DELAY"),
+		"HEARTBEAT_RATE":    os.Getenv("HEARTBEAT_RATE"),
+		"TLS_ENABLED":       os.Getenv("TLS_ENABLED"),
+		"COMPOSE_BASE_PATH": os.Getenv("COMPOSE_BASE_PATH"),
 	}
 
 	// Clean env vars
@@ -60,6 +61,10 @@ func TestLoad(t *testing.T) {
 			t.Errorf("Expected TLSEnabled false, got %v", cfg.TLSEnabled)
 		}
 
+		if cfg.ComposeBasePath != "/opt/compose-projects" {
+			t.Errorf("Expected ComposeBasePath '/opt/compose-projects', got '%s'", cfg.ComposeBasePath)
+		}
+
 		if cfg.AgentID == "" {
 			t.Error("Expected AgentID to be generated, got empty string")
 		}
@@ -72,6 +77,7 @@ func TestLoad(t *testing.T) {
 		os.Setenv("RECONNECT_DELAY", "10s")
 		os.Setenv("HEARTBEAT_RATE", "60s")
 		os.Setenv("TLS_ENABLED", "true")
+		os.Setenv("COMPOSE_BASE_PATH", "/custom/compose/path")
 
 		cfg, err := Load()
 		if err != nil {
@@ -101,7 +107,44 @@ func TestLoad(t *testing.T) {
 		if cfg.TLSEnabled != true {
 			t.Errorf("Expected TLSEnabled true, got %v", cfg.TLSEnabled)
 		}
+
+		if cfg.ComposeBasePath != "/custom/compose/path" {
+			t.Errorf("Expected ComposeBasePath '/custom/compose/path', got '%s'", cfg.ComposeBasePath)
+		}
+
+		// Clean up env vars for this test
+		os.Unsetenv("ARCANE_HOST")
+		os.Unsetenv("ARCANE_PORT")
+		os.Unsetenv("AGENT_ID")
+		os.Unsetenv("RECONNECT_DELAY")
+		os.Unsetenv("HEARTBEAT_RATE")
+		os.Unsetenv("TLS_ENABLED")
+		os.Unsetenv("COMPOSE_BASE_PATH")
 	})
+}
+
+func TestLoadWithComposeConfig(t *testing.T) {
+	// Save original env vars
+	originalComposeBasePath := os.Getenv("COMPOSE_BASE_PATH")
+	defer func() {
+		if originalComposeBasePath == "" {
+			os.Unsetenv("COMPOSE_BASE_PATH")
+		} else {
+			os.Setenv("COMPOSE_BASE_PATH", originalComposeBasePath)
+		}
+	}()
+
+	// Set environment variables
+	os.Setenv("COMPOSE_BASE_PATH", "/opt/my-compose-projects")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+
+	if cfg.ComposeBasePath != "/opt/my-compose-projects" {
+		t.Errorf("Expected ComposeBasePath='/opt/my-compose-projects', got %q", cfg.ComposeBasePath)
+	}
 }
 
 func TestGetEnv(t *testing.T) {
@@ -235,6 +278,59 @@ func TestGetEnvDuration(t *testing.T) {
 	}
 }
 
+func TestGetEnvBool(t *testing.T) {
+	tests := []struct {
+		name         string
+		key          string
+		defaultValue bool
+		envValue     string
+		expected     bool
+	}{
+		{
+			name:         "returns true when env is 'true'",
+			key:          "TEST_BOOL",
+			defaultValue: false,
+			envValue:     "true",
+			expected:     true,
+		},
+		{
+			name:         "returns false when env is 'false'",
+			key:          "TEST_BOOL",
+			defaultValue: true,
+			envValue:     "false",
+			expected:     false,
+		},
+		{
+			name:         "returns default when env not set",
+			key:          "NONEXISTENT_BOOL",
+			defaultValue: true,
+			envValue:     "",
+			expected:     true,
+		},
+		{
+			name:         "returns default when env invalid",
+			key:          "INVALID_BOOL",
+			defaultValue: false,
+			envValue:     "not_a_bool",
+			expected:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.envValue != "" {
+				os.Setenv(tt.key, tt.envValue)
+				defer os.Unsetenv(tt.key)
+			}
+
+			result := getEnvBool(tt.key, tt.defaultValue)
+			if result != tt.expected {
+				t.Errorf("Expected %v, got %v", tt.expected, result)
+			}
+		})
+	}
+}
+
 func TestGenerateAgentID(t *testing.T) {
 	agentID := generateAgentID()
 
@@ -265,7 +361,10 @@ func TestGetOrCreateAgentID(t *testing.T) {
 
 	t.Run("returns env AGENT_ID when set", func(t *testing.T) {
 		os.Setenv("AGENT_ID", "test-env-agent")
-		agentID := getOrCreateAgentID()
+		agentID, err := getOrCreateAgentID()
+		if err != nil {
+			t.Fatalf("getOrCreateAgentID() failed: %v", err)
+		}
 		if agentID != "test-env-agent" {
 			t.Errorf("Expected 'test-env-agent', got '%s'", agentID)
 		}
@@ -279,7 +378,10 @@ func TestGetOrCreateAgentID(t *testing.T) {
 		os.Remove(agentIDFile)
 		os.RemoveAll(filepath.Dir(agentIDFile))
 
-		agentID := getOrCreateAgentID()
+		agentID, err := getOrCreateAgentID()
+		if err != nil {
+			t.Fatalf("getOrCreateAgentID() failed: %v", err)
+		}
 		if agentID == "" {
 			t.Error("Expected non-empty agent ID")
 		}

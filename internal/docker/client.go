@@ -231,6 +231,98 @@ func (c *Client) ComposeDown(ctx context.Context, composeFile string) (interface
 	}, nil
 }
 
+// ComposeUpWithProject runs docker-compose up with a specific project name
+func (c *Client) ComposeUpWithProject(ctx context.Context, composeFile, projectName string) (interface{}, error) {
+	args := []string{"-f", composeFile}
+	if projectName != "" {
+		args = append(args, "-p", projectName)
+	}
+	args = append(args, "up", "-d")
+
+	cmd := exec.Command("docker-compose", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("docker-compose up failed: %s", string(output))
+	}
+
+	return map[string]interface{}{
+		"compose_file": composeFile,
+		"project_name": projectName,
+		"status":       "started",
+		"output":       string(output),
+	}, nil
+}
+
+// ComposeDownWithProject runs docker-compose down with a specific project name
+func (c *Client) ComposeDownWithProject(ctx context.Context, composeFile, projectName string) (interface{}, error) {
+	args := []string{"-f", composeFile}
+	if projectName != "" {
+		args = append(args, "-p", projectName)
+	}
+	args = append(args, "down")
+
+	cmd := exec.Command("docker-compose", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("docker-compose down failed: %s", string(output))
+	}
+
+	return map[string]interface{}{
+		"compose_file": composeFile,
+		"project_name": projectName,
+		"status":       "stopped",
+		"output":       string(output),
+	}, nil
+}
+
+func (c *Client) ComposePs(ctx context.Context, composeFile, projectName string) (interface{}, error) {
+	args := []string{"-f", composeFile}
+	if projectName != "" {
+		args = append(args, "-p", projectName)
+	}
+	args = append(args, "ps", "--format", "json")
+
+	cmd := exec.Command("docker-compose", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("docker-compose ps failed: %s", string(output))
+	}
+
+	return map[string]interface{}{
+		"compose_file": composeFile,
+		"project_name": projectName,
+		"services":     string(output),
+	}, nil
+}
+
+// ComposeLogs gets logs from compose services
+func (c *Client) ComposeLogs(ctx context.Context, composeFile, projectName, serviceName string, tail int) (interface{}, error) {
+	args := []string{"-f", composeFile}
+	if projectName != "" {
+		args = append(args, "-p", projectName)
+	}
+	args = append(args, "logs")
+	if tail > 0 {
+		args = append(args, "--tail", fmt.Sprintf("%d", tail))
+	}
+	if serviceName != "" {
+		args = append(args, serviceName)
+	}
+
+	cmd := exec.Command("docker-compose", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("docker-compose logs failed: %s", string(output))
+	}
+
+	return map[string]interface{}{
+		"compose_file": composeFile,
+		"project_name": projectName,
+		"service_name": serviceName,
+		"logs":         string(output),
+	}, nil
+}
+
 // GetMetrics collects various Docker metrics
 func (c *Client) GetMetrics(ctx context.Context) (interface{}, error) {
 	metrics := make(map[string]interface{})

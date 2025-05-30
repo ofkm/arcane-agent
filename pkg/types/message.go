@@ -36,3 +36,17 @@ type HeartbeatMessage struct {
 	Timestamp time.Time     `json:"timestamp"`
 	Metrics   *AgentMetrics `json:"metrics,omitempty"`
 }
+
+type ComposeDeployRequest struct {
+	ComposeFile string `json:"compose_file"`
+	Action      string `json:"action"` // up or dwon
+	ProjectName string `json:"project_name,omitempty"`
+}
+
+type ComposeDeployResult struct {
+	Status      string `json:"status"`
+	ComposeFile string `json:"compose_file"`
+	Action      string `json:"action"`
+	Output      string `json:"output"`
+	Error       string `json:"error,omitempty"`
+}

@@ -16,14 +16,15 @@ import (
 
 func TestNewHTTPClient(t *testing.T) {
 	cfg := &config.Config{
-		ArcaneHost: "localhost",
-		ArcanePort: 3000,
-		AgentID:    "test-agent",
-		TLSEnabled: false,
+		ArcaneHost:      "localhost",
+		ArcanePort:      3000,
+		AgentID:         "test-agent",
+		TLSEnabled:      false,
+		ComposeBasePath: "/opt/compose-projects", // Add this
 	}
 
 	dockerClient := docker.NewClient()
-	taskManager := tasks.NewManager(dockerClient)
+	taskManager := tasks.NewManager(dockerClient, cfg) // Pass config
 	httpClient := NewHTTPClient(cfg, taskManager)
 
 	if httpClient == nil {
@@ -46,14 +47,15 @@ func TestNewHTTPClient(t *testing.T) {
 
 func TestNewHTTPClientWithTLS(t *testing.T) {
 	cfg := &config.Config{
-		ArcaneHost: "example.com",
-		ArcanePort: 443,
-		AgentID:    "test-agent",
-		TLSEnabled: true,
+		ArcaneHost:      "example.com",
+		ArcanePort:      443,
+		AgentID:         "test-agent",
+		TLSEnabled:      true,
+		ComposeBasePath: "/opt/compose-projects", // Add this
 	}
 
 	dockerClient := docker.NewClient()
-	taskManager := tasks.NewManager(dockerClient)
+	taskManager := tasks.NewManager(dockerClient, cfg) // Pass config
 	httpClient := NewHTTPClient(cfg, taskManager)
 
 	expectedURL := "https://example.com:443"
@@ -78,14 +80,15 @@ func TestHTTPClientMakeRequest(t *testing.T) {
 	defer server.Close()
 
 	cfg := &config.Config{
-		ArcaneHost: "localhost",
-		ArcanePort: 3000,
-		AgentID:    "test-agent",
-		TLSEnabled: false,
+		ArcaneHost:      "localhost",
+		ArcanePort:      3000,
+		AgentID:         "test-agent",
+		TLSEnabled:      false,
+		ComposeBasePath: "/opt/compose-projects", // Add this
 	}
 
 	dockerClient := docker.NewClient()
-	taskManager := tasks.NewManager(dockerClient)
+	taskManager := tasks.NewManager(dockerClient, cfg) // Pass config
 	httpClient := NewHTTPClient(cfg, taskManager)
 
 	// Override baseURL to use test server
@@ -154,7 +157,7 @@ func TestHTTPClientStart(t *testing.T) {
 	}
 
 	dockerClient := docker.NewClient()
-	taskManager := tasks.NewManager(dockerClient)
+	taskManager := tasks.NewManager(dockerClient, cfg) // Pass config
 	httpClient := NewHTTPClient(cfg, taskManager)
 
 	// Override baseURL to use test server
@@ -211,7 +214,7 @@ func TestHTTPClientStartIntegration(t *testing.T) {
 	}
 
 	dockerClient := docker.NewClient()
-	taskManager := tasks.NewManager(dockerClient)
+	taskManager := tasks.NewManager(dockerClient, cfg) // Pass config
 	httpClient := NewHTTPClient(cfg, taskManager)
 	httpClient.baseURL = server.URL
 
@@ -245,7 +248,7 @@ func TestExecuteTask(t *testing.T) {
 	}
 
 	dockerClient := docker.NewClient()
-	taskManager := tasks.NewManager(dockerClient)
+	taskManager := tasks.NewManager(dockerClient, cfg) // Pass config
 	httpClient := NewHTTPClient(cfg, taskManager)
 
 	// Override baseURL to use test server

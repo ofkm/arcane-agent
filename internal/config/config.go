@@ -9,23 +9,31 @@ import (
 )
 
 type Config struct {
-	ArcaneHost     string
-	ArcanePort     int
-	AgentID        string
-	ReconnectDelay time.Duration
-	HeartbeatRate  time.Duration
-	TLSEnabled     bool
+	ArcaneHost      string        `json:"arcane_host"`
+	ArcanePort      int           `json:"arcane_port"`
+	AgentID         string        `json:"agent_id"`
+	TLSEnabled      bool          `json:"tls_enabled"`
+	ReconnectDelay  time.Duration `json:"reconnect_delay"`
+	HeartbeatRate   time.Duration `json:"heartbeat_rate"`
+	ComposeBasePath string        `json:"compose_base_path"`
 }
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		ArcaneHost:     getEnv("ARCANE_HOST", "localhost"),
-		ArcanePort:     getEnvInt("ARCANE_PORT", 3000),
-		AgentID:        getOrCreateAgentID(),
-		ReconnectDelay: getEnvDuration("RECONNECT_DELAY", 5*time.Second),
-		HeartbeatRate:  getEnvDuration("HEARTBEAT_RATE", 30*time.Second),
-		TLSEnabled:     getEnvBool("TLS_ENABLED", false),
+		ArcaneHost:      getEnv("ARCANE_HOST", "localhost"),
+		ArcanePort:      getEnvInt("ARCANE_PORT", 3000),
+		TLSEnabled:      getEnvBool("TLS_ENABLED", false),
+		ReconnectDelay:  getEnvDuration("RECONNECT_DELAY", 5*time.Second),
+		HeartbeatRate:   getEnvDuration("HEARTBEAT_RATE", 30*time.Second),
+		ComposeBasePath: getEnv("COMPOSE_BASE_PATH", "data/agent/compose-projects"),
 	}
+
+	// Get or generate agent ID
+	agentID, err := getOrCreateAgentID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get agent ID: %w", err)
+	}
+	cfg.AgentID = agentID
 
 	return cfg, nil
 }
@@ -64,10 +72,10 @@ func getEnvBool(key string, defaultValue bool) bool {
 	return defaultValue
 }
 
-func getOrCreateAgentID() string {
+func getOrCreateAgentID() (string, error) {
 	// First check if AGENT_ID is set in environment
 	if agentID := os.Getenv("AGENT_ID"); agentID != "" {
-		return agentID
+		return agentID, nil
 	}
 
 	// Try to load from file
@@ -75,14 +83,16 @@ func getOrCreateAgentID() string {
 	if data, err := os.ReadFile(agentIDFile); err == nil {
 		agentID := string(data)
 		if agentID != "" {
-			return agentID
+			return agentID, nil
 		}
 	}
 
 	// Generate new agent ID and save it
 	agentID := generateAgentID()
-	saveAgentID(agentID)
-	return agentID
+	if err := saveAgentID(agentID); err != nil {
+		return "", err
+	}
+	return agentID, nil
 }
 
 func generateAgentID() string {
@@ -99,13 +109,18 @@ func getAgentIDFile() string {
 	return filepath.Join(homeDir, ".arcane-agent", "agent_id")
 }
 
-func saveAgentID(agentID string) {
+func saveAgentID(agentID string) error {
 	agentIDFile := getAgentIDFile()
 
 	// Create directory if it doesn't exist
 	dir := filepath.Dir(agentIDFile)
-	os.MkdirAll(dir, 0755)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
 
 	// Write agent ID to file
-	os.WriteFile(agentIDFile, []byte(agentID), 0644)
+	if err := os.WriteFile(agentIDFile, []byte(agentID), 0644); err != nil {
+		return err
+	}
+	return nil
 }

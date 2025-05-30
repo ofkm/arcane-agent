@@ -61,8 +61,8 @@ func TestLoad(t *testing.T) {
 			t.Errorf("Expected TLSEnabled false, got %v", cfg.TLSEnabled)
 		}
 
-		if cfg.ComposeBasePath != "/opt/compose-projects" {
-			t.Errorf("Expected ComposeBasePath '/opt/compose-projects', got '%s'", cfg.ComposeBasePath)
+		if cfg.ComposeBasePath != "data/agent/compose-projects" {
+			t.Errorf("Expected ComposeBasePath 'data/agent/compose-projects', got '%s'", cfg.ComposeBasePath)
 		}
 
 		if cfg.AgentID == "" {

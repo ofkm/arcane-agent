@@ -190,7 +190,7 @@ func TestListProjects(t *testing.T) {
 	for _, expected := range projects {
 		found := false
 		for _, actual := range listedProjects {
-			if actual == expected {
+			if actual["name"] == expected {
 				found = true
 				break
 			}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 type Manager struct {
@@ -99,21 +100,65 @@ func (m *Manager) DeleteProject(projectName string) error {
 	return nil
 }
 
-// ListProjects returns a list of existing project names
-func (m *Manager) ListProjects() ([]string, error) {
+// ListProjects returns a list of all compose projects
+func (m *Manager) ListProjects() ([]map[string]interface{}, error) {
+	// Read directory entries
 	entries, err := os.ReadDir(m.basePath)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return []string{}, nil
-		}
-		return nil, fmt.Errorf("failed to read base directory: %w", err)
+		return nil, fmt.Errorf("failed to read projects directory: %w", err)
 	}
 
-	var projects []string
+	projects := make([]map[string]interface{}, 0)
 	for _, entry := range entries {
-		if entry.IsDir() {
-			projects = append(projects, entry.Name())
+		if !entry.IsDir() {
+			continue // Skip non-directories
 		}
+
+		projectName := entry.Name()
+		projectPath := filepath.Join(m.basePath, projectName)
+
+		// Get file info for timestamps
+		info, err := os.Stat(projectPath)
+		if err != nil {
+			continue // Skip if can't get info
+		}
+
+		// Look for compose file
+		composeFilePath := filepath.Join(projectPath, "docker-compose.yml")
+		if _, err := os.Stat(composeFilePath); os.IsNotExist(err) {
+			// Try alternate filename
+			composeFilePath = filepath.Join(projectPath, "compose.yml")
+			if _, err := os.Stat(composeFilePath); os.IsNotExist(err) {
+				continue // Skip if no compose file
+			}
+		}
+
+		// Read compose content
+		composeContent, _ := os.ReadFile(composeFilePath)
+
+		// Check for .env file
+		envContent := ""
+		envFilePath := filepath.Join(projectPath, ".env")
+		if envBytes, err := os.ReadFile(envFilePath); err == nil {
+			envContent = string(envBytes)
+		}
+
+		// Format timestamps in RFC3339
+		createdAt := info.ModTime().UTC().Format(time.RFC3339)
+		updatedAt := createdAt
+
+		project := map[string]interface{}{
+			"id":             projectName,
+			"name":           projectName,
+			"path":           projectPath,
+			"dirName":        projectName,
+			"createdAt":      createdAt,
+			"updatedAt":      updatedAt,
+			"composeContent": string(composeContent),
+			"envContent":     envContent,
+		}
+
+		projects = append(projects, project)
 	}
 
 	return projects, nil

@@ -80,7 +80,7 @@ func (h *HTTPClient) registerAgent() error {
 		"hostname":     hostname,
 		"platform":     runtime.GOOS,
 		"arch":         runtime.GOARCH,
-		"version":      "1.0.0",
+		"version":      "1.1.1",
 		"capabilities": []string{"docker", "compose"},
 	}
 
@@ -177,7 +177,7 @@ func (h *HTTPClient) makeRequest(method, path string, body interface{}, response
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "arcane-agent/1.0.0")
+	req.Header.Set("User-Agent", "arcane-agent/1.1.1")
 
 	resp, err := h.httpClient.Do(req)
 	if err != nil {

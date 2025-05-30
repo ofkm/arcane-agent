@@ -158,7 +158,7 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            ofkm/arcane-agent
+            ghcr.io/ofkm/arcane-agent
           tags: |
             type=ref,event=branch
             type=ref,event=pr

@@ -309,16 +309,50 @@ jobs:
           body: |
             ## Changes in v${{ needs.version-check.outputs.new_version }}
 
-            This is a ${{ needs.version-check.outputs.release_type }} release.
+            This is a **${{ needs.version-check.outputs.release_type }}** release.
 
-            ### Changes:
+            ### 🚀 Changes:
             ${{ needs.version-check.outputs.changelog }}
 
-            ### Assets
-            - Linux (amd64, arm64)
-            - macOS (amd64, arm64) 
-            - Windows (amd64)
-            - Docker images: `ghcr.io/ofkm/arcane-agent:v${{ needs.version-check.outputs.new_version }}`
+            ### 📦 Download Assets
+
+            **Binaries:**
+            - `arcane-agent-linux-amd64` - Linux x86_64
+            - `arcane-agent-linux-arm64` - Linux ARM64
+            - `arcane-agent-darwin-amd64` - macOS Intel
+            - `arcane-agent-darwin-arm64` - macOS Apple Silicon
+            - `arcane-agent-windows-amd64.exe` - Windows x86_64
+
+            **Docker Images:**
+            ```bash
+            # Latest version
+            docker pull ghcr.io/ofkm/arcane-agent:v${{ needs.version-check.outputs.new_version }}
+
+            # Version tags
+            docker pull ghcr.io/ofkm/arcane-agent:${{ needs.version-check.outputs.new_version }}
+            docker pull ghcr.io/ofkm/arcane-agent:latest
+
+            # Multi-architecture support (linux/amd64, linux/arm64)
+            ```
+
+            ### 🐳 Quick Start with Docker
+            ```bash
+            # Run the agent
+            docker run -d --name arcane-agent \
+              -e ARCANE_HOST=your-server.com \
+              -e ARCANE_PORT=3000 \
+              -e AGENT_ID=my-agent \
+              -v /var/run/docker.sock:/var/run/docker.sock \
+              ghcr.io/ofkm/arcane-agent:v${{ needs.version-check.outputs.new_version }}
+            ```
+
+            ### 📋 Installation
+            ```bash
+            # Download and install (Linux/macOS)
+            curl -L https://github.com/ofkm/arcane-agent/releases/download/v${{ needs.version-check.outputs.new_version }}/arcane-agent-linux-amd64 -o arcane-agent
+            chmod +x arcane-agent
+            ./arcane-agent --help
+            ```
           files: release/*
           draft: false
           prerelease: false

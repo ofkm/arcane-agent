@@ -91,9 +91,17 @@ func TestAgentStop(t *testing.T) {
 
 	agent := New(cfg)
 
-	// Calling Stop() should not panic
+	// First Stop() should work fine
 	agent.Stop()
 
-	// Calling Stop() multiple times should not panic
-	agent.Stop()
+	// Second Stop() should not panic - we need to fix the Agent.Stop() method
+	// For now, let's test that it doesn't crash the test
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("Second Stop() call should not panic: %v", r)
+			}
+		}()
+		agent.Stop()
+	}()
 }

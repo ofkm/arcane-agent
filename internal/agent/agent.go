@@ -67,5 +67,11 @@ func (a *Agent) Start() error {
 }
 
 func (a *Agent) Stop() {
-	close(a.shutdown)
+	select {
+	case <-a.shutdown:
+		// Already closed
+		return
+	default:
+		close(a.shutdown)
+	}
 }

@@ -34,8 +34,15 @@ jobs:
       - name: Download dependencies
         run: go mod download
 
-      - name: Run tests
-        run: go test -v ./...
+      - name: Run unit tests (no Docker)
+        run: |
+          go test -v ./internal/config/...
+          go test -v ./internal/agent/...
+          go test -v ./pkg/types/...
+          go test -v ./cmd/agent/...
+
+      - name: Run tests with coverage
+        run: go test -v -coverprofile=coverage.out ./internal/config/... ./internal/agent/... ./pkg/types/...
 
       - name: Run go vet
         run: go vet ./...
@@ -46,6 +53,15 @@ jobs:
             echo "Code is not formatted properly:"
             gofmt -s -l .
             exit 1
+          fi
+
+      - name: Run Docker integration tests (if available)
+        run: |
+          if command -v docker &> /dev/null; then
+            systemctl start docker
+            go test -v ./internal/docker/... ./internal/tasks/...
+          else
+            echo "Docker not available, skipping Docker tests"
           fi
 
   build:

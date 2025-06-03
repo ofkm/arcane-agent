@@ -16,6 +16,7 @@ import (
 
 	"github.com/ofkm/arcane-agent/internal/config"
 	"github.com/ofkm/arcane-agent/internal/tasks"
+	"github.com/ofkm/arcane-agent/internal/version"
 	"github.com/ofkm/arcane-agent/pkg/types"
 )
 
@@ -80,7 +81,7 @@ func (h *HTTPClient) registerAgent() error {
 		"hostname":     hostname,
 		"platform":     runtime.GOOS,
 		"arch":         runtime.GOARCH,
-		"version":      "1.1.1",
+		"version":      version.GetVersion(),
 		"capabilities": []string{"docker", "compose"},
 	}
 

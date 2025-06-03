@@ -16,9 +16,17 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build the binary
+# Build arguments for version information
+ARG VERSION=dev
+ARG COMMIT=unknown
+ARG DATE=unknown
+
+# Build the binary with version information
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo \
-    -ldflags='-w -s -extldflags "-static"' \
+    -ldflags="-w -s -extldflags '-static' \
+    -X github.com/ofkm/arcane-agent/internal/version.Version=${VERSION} \
+    -X github.com/ofkm/arcane-agent/internal/version.Commit=${COMMIT} \
+    -X github.com/ofkm/arcane-agent/internal/version.Date=${DATE}" \
     -o arcane-agent ./cmd/agent
 
 # Final stage

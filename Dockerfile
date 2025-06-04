@@ -30,19 +30,10 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo \
     -o arcane-agent ./cmd/agent
 
 # Final stage
-FROM scratch
+FROM docker:28.2.2-cli-alpine3.21 AS runtime
 
-# Copy CA certificates from builder
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-
-# Copy timezone data
-COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
-
-# Copy the binary
+# Copy your built binary from builder stage
 COPY --from=builder /app/arcane-agent /arcane-agent
 
-# Expose default port (adjust as needed)
 EXPOSE 8080
-
-# Set the entrypoint
 ENTRYPOINT ["/arcane-agent"]

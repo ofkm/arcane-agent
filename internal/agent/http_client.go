@@ -131,14 +131,15 @@ func (h *HTTPClient) sendHeartbeat() error {
 		},
 	}
 
-	return h.makeRequest("POST", "/api/agents/heartbeat", heartbeatData, nil)
+	url := fmt.Sprintf("/api/agents/%s/heartbeat", h.config.AgentID)
+	return h.makeRequest("POST", url, heartbeatData, nil)
 }
 
 func (h *HTTPClient) pollForTasks() error {
-	var tasks []types.TaskRequest
+	var response TasksResponse
 
-	url := fmt.Sprintf("/api/agents/%s/tasks", h.config.AgentID)
-	err := h.makeRequest("GET", url, nil, &tasks)
+	url := fmt.Sprintf("/api/agents/%s/tasks/pending", h.config.AgentID)
+	err := h.makeRequest("GET", url, nil, &response)
 
 	if err != nil {
 		// Check if it's a JSON parsing error (likely empty response or HTML)
@@ -149,9 +150,21 @@ func (h *HTTPClient) pollForTasks() error {
 		return err
 	}
 
+	// Check if the response indicates success
+	if !response.Success {
+		if response.Error != "" {
+			log.Printf("Backend error getting tasks: %s", response.Error)
+		}
+		return nil // Don't treat backend errors as fatal
+	}
+
 	// Process each task
-	for _, task := range tasks {
+	for _, task := range response.Data {
 		go h.executeTask(task)
+	}
+
+	if len(response.Data) > 0 {
+		log.Printf("Retrieved %d pending tasks", len(response.Data))
 	}
 
 	return nil
@@ -196,43 +209,65 @@ func (h *HTTPClient) executeTask(task types.TaskRequest) {
 }
 
 func (h *HTTPClient) makeRequest(method, path string, body interface{}, response interface{}) error {
-	var reqBody io.Reader
-
+	var bodyReader io.Reader
 	if body != nil {
 		jsonData, err := json.Marshal(body)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to marshal request body: %w", err)
 		}
-		reqBody = bytes.NewBuffer(jsonData)
+		bodyReader = bytes.NewReader(jsonData)
+		log.Printf("Making %s request to %s with body: %s", method, path, string(jsonData))
+	} else {
+		log.Printf("Making %s request to %s", method, path)
 	}
 
-	req, err := http.NewRequest(method, h.baseURL+path, reqBody)
+	url := h.baseURL + path
+	req, err := http.NewRequest(method, url, bodyReader)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create request: %w", err)
 	}
 
+	// Set headers
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "arcane-agent/1.1.1")
+	req.Header.Set("User-Agent", fmt.Sprintf("arcane-agent/%s", version.GetVersion()))
+
+	// Add authentication token as X-Agent-Token header
+	if h.config.Token != "" {
+		req.Header.Set("X-Agent-Token", h.config.Token)
+	}
+
+	log.Printf("Request headers: %+v", req.Header)
 
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
-		return err
+		log.Printf("Request failed: %v", err)
+		return fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
-	// Read the response body first
-	bodyBytes, err := io.ReadAll(resp.Body)
+	log.Printf("Response status: %s (%d)", resp.Status, resp.StatusCode)
+	log.Printf("Response headers: %+v", resp.Header)
+
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		log.Printf("Failed to read response body: %v", err)
+		return fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("HTTP %d: %s - %s", resp.StatusCode, resp.Status, string(bodyBytes))
+	log.Printf("Response body: %s", string(respBody))
+
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("HTTP %d: %s - %s", resp.StatusCode, resp.Status, string(respBody))
 	}
 
-	if response != nil {
-		// Parse the body we already read
-		return json.Unmarshal(bodyBytes, response)
+	if response != nil && len(respBody) > 0 {
+		log.Printf("Attempting to unmarshal response into type: %T", response)
+		if err := json.Unmarshal(respBody, response); err != nil {
+			log.Printf("Failed to unmarshal response: %v", err)
+			log.Printf("Response body was: %s", string(respBody))
+			return fmt.Errorf("failed to unmarshal response: %w", err)
+		}
+		log.Printf("Successfully unmarshaled response: %+v", response)
 	}
 
 	return nil

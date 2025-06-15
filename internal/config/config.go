@@ -12,6 +12,7 @@ type Config struct {
 	ArcaneHost      string        `json:"arcane_host"`
 	ArcanePort      int           `json:"arcane_port"`
 	AgentID         string        `json:"agent_id"`
+	Token           string        `json:"token"`
 	TLSEnabled      bool          `json:"tls_enabled"`
 	ReconnectDelay  time.Duration `json:"reconnect_delay"`
 	HeartbeatRate   time.Duration `json:"heartbeat_rate"`
@@ -22,6 +23,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		ArcaneHost:      getEnv("ARCANE_HOST", "localhost"),
 		ArcanePort:      getEnvInt("ARCANE_PORT", 3000),
+		Token:           getEnv("ARCANE_TOKEN", ""),
 		TLSEnabled:      getEnvBool("TLS_ENABLED", false),
 		ReconnectDelay:  getEnvDuration("RECONNECT_DELAY", 5*time.Second),
 		HeartbeatRate:   getEnvDuration("HEARTBEAT_RATE", 30*time.Second),
@@ -34,6 +36,10 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("failed to get agent ID: %w", err)
 	}
 	cfg.AgentID = agentID
+
+	if cfg.Token == "" {
+		return nil, fmt.Errorf("ARCANE_TOKEN environment variable is required")
+	}
 
 	return cfg, nil
 }

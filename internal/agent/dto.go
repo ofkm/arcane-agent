@@ -1,5 +1,14 @@
 package agent
 
+import "github.com/ofkm/arcane-agent/pkg/types"
+
+// Response wrapper for API responses
+type TasksResponse struct {
+	Success bool                `json:"success"`
+	Data    []types.TaskRequest `json:"tasks"`
+	Error   string              `json:"error,omitempty"`
+}
+
 // DTO types matching the backend
 type RegisterAgentDto struct {
 	ID           string   `json:"id" binding:"required"`
@@ -7,7 +16,7 @@ type RegisterAgentDto struct {
 	Platform     string   `json:"platform"`
 	Version      string   `json:"version"`
 	Capabilities []string `json:"capabilities"`
-	URL          string   `json:"url,omitempty"`
+	URL          string   `json:"url"`
 }
 
 type HeartbeatDto struct {

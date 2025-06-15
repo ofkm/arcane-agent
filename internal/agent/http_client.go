@@ -43,36 +43,6 @@ func NewHTTPClient(cfg *config.Config, taskManager *tasks.Manager) *HTTPClient {
 	}
 }
 
-func (h *HTTPClient) Start(ctx context.Context) error {
-	// Register agent first
-	if err := h.registerAgent(); err != nil {
-		return fmt.Errorf("failed to register: %v", err)
-	}
-
-	log.Printf("Agent registered successfully")
-
-	// Start polling loop
-	ticker := time.NewTicker(5 * time.Second) // Poll every 5 seconds
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			log.Printf("HTTP client shutting down")
-			return nil
-		case <-ticker.C:
-			// Send heartbeat and check for tasks
-			if err := h.sendHeartbeat(); err != nil {
-				log.Printf("Heartbeat failed: %v", err)
-			}
-
-			if err := h.pollForTasks(); err != nil {
-				log.Printf("Task polling failed: %v", err)
-			}
-		}
-	}
-}
-
 func (h *HTTPClient) registerAgent() error {
 	hostname := getHostname()
 
@@ -85,9 +55,10 @@ func (h *HTTPClient) registerAgent() error {
 		URL:          "", // Empty string if no callback URL
 	}
 
-	// Add debug logging
-	jsonData, _ := json.MarshalIndent(regData, "", "  ")
-	log.Printf("Registering agent with data: %s", string(jsonData))
+	if h.config.Debug {
+		jsonData, _ := json.MarshalIndent(regData, "", "  ")
+		debugLog(h.config, "Registering agent with data: %s", string(jsonData))
+	}
 
 	return h.makeRequest("POST", "/api/agents/register", regData, nil)
 }
@@ -131,47 +102,56 @@ func (h *HTTPClient) sendHeartbeat() error {
 		},
 	}
 
+	debugLog(h.config, "Sending heartbeat")
 	url := fmt.Sprintf("/api/agents/%s/heartbeat", h.config.AgentID)
 	return h.makeRequest("POST", url, heartbeatData, nil)
 }
 
 func (h *HTTPClient) pollForTasks() error {
+	debugLog(h.config, "Polling for tasks for agent %s", h.config.AgentID)
+
 	var response TasksResponse
 
 	url := fmt.Sprintf("/api/agents/%s/tasks/pending", h.config.AgentID)
 	err := h.makeRequest("GET", url, nil, &response)
 
 	if err != nil {
+		debugLog(h.config, "Error making request to tasks endpoint: %v", err)
 		// Check if it's a JSON parsing error (likely empty response or HTML)
 		if strings.Contains(err.Error(), "invalid character") {
-			log.Printf("No JSON response from tasks endpoint (likely no tasks available)")
+			debugLog(h.config, "No JSON response from tasks endpoint (likely no tasks available)")
 			return nil // Don't treat this as an error
 		}
 		return err
 	}
 
+	debugLog(h.config, "Tasks response received - Success: %t, Error: %s, Data length: %d",
+		response.Success, response.Error, len(response.Data))
+
 	// Check if the response indicates success
 	if !response.Success {
 		if response.Error != "" {
-			log.Printf("Backend error getting tasks: %s", response.Error)
+			debugLog(h.config, "Backend error getting tasks: %s", response.Error)
 		}
 		return nil // Don't treat backend errors as fatal
 	}
 
 	// Process each task
-	for _, task := range response.Data {
-		go h.executeTask(task)
-	}
-
 	if len(response.Data) > 0 {
-		log.Printf("Retrieved %d pending tasks", len(response.Data))
+		log.Printf("Retrieved %d pending tasks", len(response.Data)) // Keep this as regular log
+		for i, task := range response.Data {
+			debugLog(h.config, "Task %d: ID=%s, Type=%s, Payload=%+v", i, task.ID, task.Type, task.Payload)
+			go h.executeTask(task)
+		}
+	} else {
+		debugLog(h.config, "No pending tasks found")
 	}
 
 	return nil
 }
 
 func (h *HTTPClient) executeTask(task types.TaskRequest) {
-	log.Printf("Executing task %s of type %s", task.ID, task.Type)
+	log.Printf("Executing task %s of type %s", task.ID, task.Type) // Keep this as regular log
 
 	// Execute the task using task manager
 	result, err := h.taskManager.ExecuteTask(task.Type, task.Payload)
@@ -195,16 +175,16 @@ func (h *HTTPClient) executeTask(task types.TaskRequest) {
 		errStr := err.Error()
 		errorMsg = &errStr
 		taskResult.Error = errorMsg
-		log.Printf("Task %s failed: %v", task.ID, err)
+		log.Printf("Task %s failed: %v", task.ID, err) // Keep this as regular log
 	} else {
 		taskResult.Status = TaskStatusCompleted
 		taskResult.Result = resultMap
-		log.Printf("Task %s completed successfully", task.ID)
+		log.Printf("Task %s completed successfully", task.ID) // Keep this as regular log
 	}
 
 	url := fmt.Sprintf("/api/agents/%s/tasks/%s/result", h.config.AgentID, task.ID)
 	if err := h.makeRequest("POST", url, taskResult, nil); err != nil {
-		log.Printf("Failed to send task result: %v", err)
+		log.Printf("Failed to send task result: %v", err) // Keep this as regular log
 	}
 }
 
@@ -216,9 +196,9 @@ func (h *HTTPClient) makeRequest(method, path string, body interface{}, response
 			return fmt.Errorf("failed to marshal request body: %w", err)
 		}
 		bodyReader = bytes.NewReader(jsonData)
-		log.Printf("Making %s request to %s with body: %s", method, path, string(jsonData))
+		debugLog(h.config, "Making %s request to %s with body: %s", method, path, string(jsonData))
 	} else {
-		log.Printf("Making %s request to %s", method, path)
+		debugLog(h.config, "Making %s request to %s", method, path)
 	}
 
 	url := h.baseURL + path
@@ -236,41 +216,79 @@ func (h *HTTPClient) makeRequest(method, path string, body interface{}, response
 		req.Header.Set("X-Agent-Token", h.config.Token)
 	}
 
-	log.Printf("Request headers: %+v", req.Header)
+	debugLog(h.config, "Request headers: %+v", req.Header)
 
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
-		log.Printf("Request failed: %v", err)
+		debugLog(h.config, "Request failed: %v", err)
 		return fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
-	log.Printf("Response status: %s (%d)", resp.Status, resp.StatusCode)
-	log.Printf("Response headers: %+v", resp.Header)
+	debugLog(h.config, "Response status: %s (%d)", resp.Status, resp.StatusCode)
+	debugLog(h.config, "Response headers: %+v", resp.Header)
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Printf("Failed to read response body: %v", err)
+		debugLog(h.config, "Failed to read response body: %v", err)
 		return fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	log.Printf("Response body: %s", string(respBody))
+	debugLog(h.config, "Response body: %s", string(respBody))
 
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("HTTP %d: %s - %s", resp.StatusCode, resp.Status, string(respBody))
 	}
 
 	if response != nil && len(respBody) > 0 {
-		log.Printf("Attempting to unmarshal response into type: %T", response)
+		debugLog(h.config, "Attempting to unmarshal response into type: %T", response)
 		if err := json.Unmarshal(respBody, response); err != nil {
-			log.Printf("Failed to unmarshal response: %v", err)
-			log.Printf("Response body was: %s", string(respBody))
+			debugLog(h.config, "Failed to unmarshal response: %v", err)
+			debugLog(h.config, "Response body was: %s", string(respBody))
 			return fmt.Errorf("failed to unmarshal response: %w", err)
 		}
-		log.Printf("Successfully unmarshaled response: %+v", response)
+		debugLog(h.config, "Successfully unmarshaled response: %+v", response)
 	}
 
 	return nil
+}
+
+func (h *HTTPClient) Start(ctx context.Context) error {
+	// Register agent first
+	if err := h.registerAgent(); err != nil {
+		return fmt.Errorf("failed to register: %v", err)
+	}
+
+	log.Printf("Agent registered successfully")
+
+	// Start main loop
+	heartbeatTicker := time.NewTicker(h.config.HeartbeatRate)
+	taskTicker := time.NewTicker(5 * time.Second) // Poll every 5 seconds
+
+	defer heartbeatTicker.Stop()
+	defer taskTicker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			debugLog(h.config, "HTTP client shutting down")
+			return nil
+		case <-heartbeatTicker.C:
+			debugLog(h.config, "Heartbeat timer triggered")
+			if err := h.sendHeartbeat(); err != nil {
+				log.Printf("Heartbeat failed: %v", err)
+			} else {
+				debugLog(h.config, "Heartbeat sent successfully")
+			}
+		case <-taskTicker.C:
+			debugLog(h.config, "Task polling timer triggered")
+			if err := h.pollForTasks(); err != nil {
+				log.Printf("Task polling failed: %v", err)
+			} else {
+				debugLog(h.config, "Task polling completed")
+			}
+		}
+	}
 }
 
 // Helper function to get hostname

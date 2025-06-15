@@ -14,17 +14,20 @@ type Config struct {
 	AgentID         string        `json:"agent_id"`
 	Token           string        `json:"token"`
 	TLSEnabled      bool          `json:"tls_enabled"`
+	Debug           bool          `json:"debug"` // Add this field
 	ReconnectDelay  time.Duration `json:"reconnect_delay"`
 	HeartbeatRate   time.Duration `json:"heartbeat_rate"`
 	ComposeBasePath string        `json:"compose_base_path"`
 }
 
 func Load() (*Config, error) {
+
 	cfg := &Config{
 		ArcaneHost:      getEnv("ARCANE_HOST", "localhost"),
 		ArcanePort:      getEnvInt("ARCANE_PORT", 3000),
 		Token:           getEnv("ARCANE_TOKEN", ""),
 		TLSEnabled:      getEnvBool("TLS_ENABLED", false),
+		Debug:           getEnvBool("DEBUG", false), // Add this line
 		ReconnectDelay:  getEnvDuration("RECONNECT_DELAY", 5*time.Second),
 		HeartbeatRate:   getEnvDuration("HEARTBEAT_RATE", 30*time.Second),
 		ComposeBasePath: getEnv("COMPOSE_BASE_PATH", "data/agent/compose-projects"),

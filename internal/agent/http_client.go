@@ -76,36 +76,59 @@ func (h *HTTPClient) Start(ctx context.Context) error {
 func (h *HTTPClient) registerAgent() error {
 	hostname := getHostname()
 
-	regData := map[string]interface{}{
-		"agent_id":     h.config.AgentID,
-		"hostname":     hostname,
-		"platform":     runtime.GOOS,
-		"arch":         runtime.GOARCH,
-		"version":      version.GetVersion(),
-		"capabilities": []string{"docker", "compose"},
+	regData := RegisterAgentDto{
+		ID:           h.config.AgentID,
+		Hostname:     hostname,
+		Platform:     runtime.GOOS,
+		Version:      version.GetVersion(),
+		Capabilities: []string{"docker", "compose"},
+		URL:          "", // Empty string if no callback URL
 	}
+
+	// Add debug logging
+	jsonData, _ := json.MarshalIndent(regData, "", "  ")
+	log.Printf("Registering agent with data: %s", string(jsonData))
 
 	return h.makeRequest("POST", "/api/agents/register", regData, nil)
 }
 
 func (h *HTTPClient) sendHeartbeat() error {
 	// Get current metrics
-	metrics, err := h.taskManager.ExecuteTask("metrics", map[string]interface{}{})
-	if err != nil {
-		metrics = map[string]interface{}{
-			"containerCount": 0,
-			"imageCount":     0,
-			"stackCount":     0,
-			"networkCount":   0,
-			"volumeCount":    0,
+	metricsResult, err := h.taskManager.ExecuteTask("metrics", map[string]interface{}{})
+
+	var agentMetrics *AgentMetrics
+	if err == nil {
+		if metricsMap, ok := metricsResult.(map[string]interface{}); ok {
+			agentMetrics = &AgentMetrics{
+				ContainerCount: getIntFromMap(metricsMap, "containerCount"),
+				ImageCount:     getIntFromMap(metricsMap, "imageCount"),
+				StackCount:     getIntFromMap(metricsMap, "stackCount"),
+				NetworkCount:   getIntFromMap(metricsMap, "networkCount"),
+				VolumeCount:    getIntFromMap(metricsMap, "volumeCount"),
+			}
 		}
 	}
 
-	heartbeatData := map[string]interface{}{
-		"agent_id":  h.config.AgentID,
-		"status":    "online",
-		"timestamp": time.Now().Unix(),
-		"metrics":   metrics,
+	// Get Docker info
+	dockerInfoResult, _ := h.taskManager.ExecuteTask("docker_info", map[string]interface{}{})
+	var dockerInfo *DockerInfo
+	if dockerInfoMap, ok := dockerInfoResult.(map[string]interface{}); ok {
+		dockerInfo = &DockerInfo{
+			Version:    getStringFromMap(dockerInfoMap, "version"),
+			Containers: getIntFromMap(dockerInfoMap, "containers"),
+			Images:     getIntFromMap(dockerInfoMap, "images"),
+		}
+	}
+
+	heartbeatData := HeartbeatDto{
+		Status:  "online",
+		Metrics: agentMetrics,
+		Docker:  dockerInfo,
+		Metadata: map[string]interface{}{
+			"timestamp": time.Now().Unix(),
+			"platform":  runtime.GOOS,
+			"arch":      runtime.GOARCH,
+		},
 	}
 
 	return h.makeRequest("POST", "/api/agents/heartbeat", heartbeatData, nil)
@@ -140,18 +163,29 @@ func (h *HTTPClient) executeTask(task types.TaskRequest) {
 	// Execute the task using task manager
 	result, err := h.taskManager.ExecuteTask(task.Type, task.Payload)
 
-	// Send result back
-	taskResult := types.TaskResult{
-		TaskID: task.ID,
-		Status: "completed",
-		Result: result,
+	// Prepare result data
+	var resultMap map[string]interface{}
+	if result != nil {
+		if rm, ok := result.(map[string]interface{}); ok {
+			resultMap = rm
+		} else {
+			resultMap = map[string]interface{}{"data": result}
+		}
 	}
 
+	// Send result back using SubmitTaskResultDto
+	var taskResult SubmitTaskResultDto
+	var errorMsg *string
+
 	if err != nil {
-		taskResult.Status = "failed"
-		taskResult.Error = err.Error()
+		taskResult.Status = TaskStatusFailed
+		errStr := err.Error()
+		errorMsg = &errStr
+		taskResult.Error = errorMsg
 		log.Printf("Task %s failed: %v", task.ID, err)
 	} else {
+		taskResult.Status = TaskStatusCompleted
+		taskResult.Result = resultMap
 		log.Printf("Task %s completed successfully", task.ID)
 	}
 

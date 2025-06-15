@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -13,7 +14,8 @@ import (
 
 type Agent struct {
 	config       *config.Config
-	httpClient   *HTTPClient
+	wsClient     *WebSocketClient
+	httpClient   *HTTPClient // Keep as fallback
 	dockerClient *docker.Client
 	taskManager  *tasks.Manager
 
@@ -30,10 +32,17 @@ func New(cfg *config.Config) *Agent {
 
 	dockerClient := docker.NewClient()
 	taskManager := tasks.NewManager(dockerClient, cfg)
-	httpClient := NewHTTPClient(cfg, taskManager)
+
+	var wsClient *WebSocketClient
+	if cfg.UseWebSocket {
+		wsClient = NewWebSocketClient(cfg, taskManager)
+	}
+
+	httpClient := NewHTTPClient(cfg, taskManager) // Always create for fallback/registration
 
 	return &Agent{
 		config:       cfg,
+		wsClient:     wsClient,
 		httpClient:   httpClient,
 		dockerClient: dockerClient,
 		taskManager:  taskManager,
@@ -47,14 +56,41 @@ func New(cfg *config.Config) *Agent {
 func (a *Agent) Start() error {
 	log.Printf("Starting Arcane Agent %s", a.config.AgentID)
 
-	// Start HTTP client (handles registration, heartbeat, and task polling)
-	a.wg.Add(1)
-	go func() {
-		defer a.wg.Done()
-		if err := a.httpClient.Start(a.ctx); err != nil {
-			log.Printf("HTTP client error: %v", err)
+	if a.config.UseWebSocket && a.wsClient != nil {
+		log.Printf("Using WebSocket communication")
+
+		// Register agent via HTTP first (required for WebSocket auth)
+		if err := a.httpClient.registerAgent(); err != nil {
+			return fmt.Errorf("failed to register agent: %w", err)
 		}
-	}()
+		log.Printf("Agent registered successfully")
+
+		// Start WebSocket client
+		a.wg.Add(1)
+		go func() {
+			defer a.wg.Done()
+			if err := a.wsClient.Start(a.ctx); err != nil {
+				log.Printf("WebSocket client error: %v", err)
+				log.Printf("Falling back to HTTP polling...")
+
+				// Fallback to HTTP if WebSocket fails
+				if err := a.httpClient.startPolling(a.ctx); err != nil {
+					log.Printf("HTTP polling error: %v", err)
+				}
+			}
+		}()
+	} else {
+		log.Printf("Using HTTP polling communication")
+
+		// Use HTTP polling only
+		a.wg.Add(1)
+		go func() {
+			defer a.wg.Done()
+			if err := a.httpClient.Start(a.ctx); err != nil {
+				log.Printf("HTTP client error: %v", err)
+			}
+		}()
+	}
 
 	// Wait for shutdown signal
 	<-a.shutdown

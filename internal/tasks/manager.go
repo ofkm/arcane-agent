@@ -40,6 +40,19 @@ func (m *Manager) ExecuteTask(taskType string, payload map[string]interface{}) (
 	ctx := context.Background()
 
 	switch taskType {
+	// Direct Docker commands
+	case "version":
+		return m.executeDirectDockerCommand("version", payload)
+	case "ps":
+		return m.executeDirectDockerCommand("ps", payload)
+	case "images":
+		return m.executeDirectDockerCommand("images", payload)
+	case "info":
+		return m.executeDirectDockerCommand("info", payload)
+
+	// Existing task types
+	case "docker_info":
+		return m.dockerClient.GetSystemInfo(ctx)
 	case "docker_command":
 		return m.executeDockerCommand(payload)
 	case "container_start":
@@ -95,6 +108,58 @@ func (m *Manager) ExecuteTask(taskType string, payload map[string]interface{}) (
 	default:
 		return nil, fmt.Errorf("unknown task type: %s", taskType)
 	}
+}
+
+// Helper method to execute direct Docker commands
+func (m *Manager) executeDirectDockerCommand(command string, payload map[string]interface{}) (interface{}, error) {
+	// Extract args from payload
+	args := []string{}
+	if argsInterface, ok := payload["args"]; ok {
+		if argsList, ok := argsInterface.([]interface{}); ok {
+			for _, arg := range argsList {
+				if argStr, ok := arg.(string); ok {
+					args = append(args, argStr)
+				}
+			}
+		}
+	}
+
+	// For certain commands, add default formatting
+	switch command {
+	case "ps":
+		if len(args) == 0 {
+			args = []string{"-a", "--format", "json"}
+		}
+	case "images":
+		if len(args) == 0 {
+			args = []string{"--format", "json"}
+		}
+	}
+
+	return m.executeDockerCommand(map[string]interface{}{
+		"command": command,
+		"args":    args,
+	})
+}
+
+// Add this new method for version command
+func (m *Manager) executeVersionCommand(payload map[string]interface{}) (interface{}, error) {
+	// Use args from payload if provided, otherwise default
+	args := []string{}
+	if argsInterface, ok := payload["args"]; ok {
+		if argsList, ok := argsInterface.([]interface{}); ok {
+			for _, arg := range argsList {
+				if argStr, ok := arg.(string); ok {
+					args = append(args, argStr)
+				}
+			}
+		}
+	}
+
+	return m.executeDockerCommand(map[string]interface{}{
+		"command": "version",
+		"args":    args,
+	})
 }
 
 func (m *Manager) executeDockerCommand(payload map[string]interface{}) (interface{}, error) {

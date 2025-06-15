@@ -253,15 +253,15 @@ func (h *HTTPClient) makeRequest(method, path string, body interface{}, response
 	return nil
 }
 
-func (h *HTTPClient) Start(ctx context.Context) error {
-	// Register agent first
-	if err := h.registerAgent(); err != nil {
-		return fmt.Errorf("failed to register: %v", err)
-	}
+func (h *HTTPClient) RegisterAgent() error {
+	return h.registerAgent()
+}
 
-	log.Printf("Agent registered successfully")
+// Separate polling logic from Start method
+func (h *HTTPClient) startPolling(ctx context.Context) error {
+	log.Printf("Starting HTTP polling mode")
 
-	// Start main loop
+	// Start polling loops
 	heartbeatTicker := time.NewTicker(h.config.HeartbeatRate)
 	taskTicker := time.NewTicker(5 * time.Second) // Poll every 5 seconds
 
@@ -271,7 +271,7 @@ func (h *HTTPClient) Start(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			debugLog(h.config, "HTTP client shutting down")
+			debugLog(h.config, "HTTP polling shutting down")
 			return nil
 		case <-heartbeatTicker.C:
 			debugLog(h.config, "Heartbeat timer triggered")
@@ -289,6 +289,18 @@ func (h *HTTPClient) Start(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+func (h *HTTPClient) Start(ctx context.Context) error {
+	// Register agent first
+	if err := h.registerAgent(); err != nil {
+		return fmt.Errorf("failed to register: %v", err)
+	}
+
+	log.Printf("Agent registered successfully")
+
+	// Start polling
+	return h.startPolling(ctx)
 }
 
 // Helper function to get hostname

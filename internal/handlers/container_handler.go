@@ -24,13 +24,20 @@ func (h *ContainerHandler) ListContainers(c *gin.Context) {
 
 	containerList, err := h.dockerClient.ListContainers(c.Request.Context(), all)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"data":    nil,
+			"success": false,
+			"error":   err.Error(),
+		})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"containers": containerList,
-		"total":      len(containerList),
+		"data": gin.H{
+			"containers": containerList,
+			"total":      len(containerList),
+		},
+		"success": true,
 	})
 }
 
@@ -38,24 +45,38 @@ func (h *ContainerHandler) GetContainer(c *gin.Context) {
 	containerID := c.Param("id")
 	container, err := h.dockerClient.GetContainer(c.Request.Context(), containerID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{
+			"data":    nil,
+			"success": false,
+			"error":   err.Error(),
+		})
 		return
 	}
 
-	c.JSON(http.StatusOK, container)
+	c.JSON(http.StatusOK, gin.H{
+		"data":    container,
+		"success": true,
+	})
 }
 
 func (h *ContainerHandler) StartContainer(c *gin.Context) {
 	containerID := c.Param("id")
 	err := h.dockerClient.StartContainer(c.Request.Context(), containerID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"data":    nil,
+			"success": false,
+			"error":   err.Error(),
+		})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message":      "Container started successfully",
-		"container_id": containerID,
+		"data": gin.H{
+			"message":      "Container started successfully",
+			"container_id": containerID,
+		},
+		"success": true,
 	})
 }
 
@@ -63,13 +84,20 @@ func (h *ContainerHandler) StopContainer(c *gin.Context) {
 	containerID := c.Param("id")
 	err := h.dockerClient.StopContainer(c.Request.Context(), containerID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"data":    nil,
+			"success": false,
+			"error":   err.Error(),
+		})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message":      "Container stopped successfully",
-		"container_id": containerID,
+		"data": gin.H{
+			"message":      "Container stopped successfully",
+			"container_id": containerID,
+		},
+		"success": true,
 	})
 }
 
@@ -77,12 +105,19 @@ func (h *ContainerHandler) RestartContainer(c *gin.Context) {
 	containerID := c.Param("id")
 	err := h.dockerClient.RestartContainer(c.Request.Context(), containerID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"data":    nil,
+			"success": false,
+			"error":   err.Error(),
+		})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message":      "Container restarted successfully",
-		"container_id": containerID,
+		"data": gin.H{
+			"message":      "Container restarted successfully",
+			"container_id": containerID,
+		},
+		"success": true,
 	})
 }

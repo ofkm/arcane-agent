@@ -23,13 +23,20 @@ func (h *ImageHandler) ListImages(c *gin.Context) {
 
 	images, err := h.dockerClient.ListImages(c.Request.Context(), all)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"data":    nil,
+			"success": false,
+			"error":   err.Error(),
+		})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"images": images,
-		"total":  len(images),
+		"data": gin.H{
+			"images": images,
+			"total":  len(images),
+		},
+		"success": true,
 	})
 }
 
@@ -37,11 +44,18 @@ func (h *ImageHandler) GetImage(c *gin.Context) {
 	imageID := c.Param("id")
 	image, err := h.dockerClient.GetImage(c.Request.Context(), imageID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{
+			"data":    nil,
+			"success": false,
+			"error":   err.Error(),
+		})
 		return
 	}
 
-	c.JSON(http.StatusOK, image)
+	c.JSON(http.StatusOK, gin.H{
+		"data":    image,
+		"success": true,
+	})
 }
 
 func (h *ImageHandler) CreateImage(c *gin.Context) {
@@ -52,7 +66,11 @@ func (h *ImageHandler) CreateImage(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"data":    nil,
+			"success": false,
+			"error":   err.Error(),
+		})
 		return
 	}
 
@@ -63,13 +81,20 @@ func (h *ImageHandler) CreateImage(c *gin.Context) {
 
 	err := h.dockerClient.PullImage(c.Request.Context(), req.FromImage, req.Tag, req.Platform)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"data":    nil,
+			"success": false,
+			"error":   err.Error(),
+		})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Image pulled successfully",
-		"image":   req.FromImage + ":" + req.Tag,
+		"data": gin.H{
+			"message": "Image pulled successfully",
+			"image":   req.FromImage + ":" + req.Tag,
+		},
+		"success": true,
 	})
 }
 
@@ -92,13 +117,20 @@ func (h *ImageHandler) DeleteImage(c *gin.Context) {
 
 	deletedImages, err := h.dockerClient.RemoveImage(c.Request.Context(), imageID, req.Force, req.NoPrune)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"data":    nil,
+			"success": false,
+			"error":   err.Error(),
+		})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message":        "Image deleted successfully",
-		"deleted_images": deletedImages,
+		"data": gin.H{
+			"message":        "Image deleted successfully",
+			"deleted_images": deletedImages,
+		},
+		"success": true,
 	})
 }
 
@@ -111,7 +143,11 @@ func (h *ImageHandler) TagImage(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"data":    nil,
+			"success": false,
+			"error":   err.Error(),
+		})
 		return
 	}
 
@@ -122,14 +158,21 @@ func (h *ImageHandler) TagImage(c *gin.Context) {
 
 	err := h.dockerClient.TagImage(c.Request.Context(), imageID, req.Repository, req.Tag)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"data":    nil,
+			"success": false,
+			"error":   err.Error(),
+		})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Image tagged successfully",
-		"source":  imageID,
-		"target":  req.Repository + ":" + req.Tag,
+		"data": gin.H{
+			"message": "Image tagged successfully",
+			"source":  imageID,
+			"target":  req.Repository + ":" + req.Tag,
+		},
+		"success": true,
 	})
 }
 
@@ -144,7 +187,11 @@ func (h *ImageHandler) PushImage(c *gin.Context) {
 
 	err := h.dockerClient.PushImage(c.Request.Context(), imageID, req.Tag)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"data":    nil,
+			"success": false,
+			"error":   err.Error(),
+		})
 		return
 	}
 
@@ -154,7 +201,10 @@ func (h *ImageHandler) PushImage(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Image pushed successfully",
-		"image":   pushTarget,
+		"data": gin.H{
+			"message": "Image pushed successfully",
+			"image":   pushTarget,
+		},
+		"success": true,
 	})
 }

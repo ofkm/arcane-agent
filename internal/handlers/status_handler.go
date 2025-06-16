@@ -19,8 +19,11 @@ func NewStatusHandler(cfg *config.Config) *StatusHandler {
 
 func (h *StatusHandler) GetStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
-		"status":   "running",
-		"agent_id": h.config.AgentID,
-		"version":  h.config.Version,
+		"data": gin.H{
+			"status":   "running",
+			"agent_id": h.config.AgentID,
+			"version":  h.config.Version,
+		},
+		"success": true,
 	})
 }

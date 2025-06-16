@@ -20,9 +20,16 @@ func NewDockerHandler(dockerClient *docker.Client) *DockerHandler {
 func (h *DockerHandler) GetDockerInfo(c *gin.Context) {
 	info, err := h.dockerClient.GetSystemInfo(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"data":    nil,
+			"success": false,
+			"error":   err.Error(),
+		})
 		return
 	}
 
-	c.JSON(http.StatusOK, info)
+	c.JSON(http.StatusOK, gin.H{
+		"data":    info,
+		"success": true,
+	})
 }

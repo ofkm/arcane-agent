@@ -12,7 +12,11 @@ func APIKeyMiddleware(expectedAPIKey string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		apiKey := c.GetHeader("X-API-Key")
 		if apiKey != expectedAPIKey {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"data":    nil,
+				"success": false,
+				"error":   "Unauthorized",
+			})
 			return
 		}
 		c.Next()
@@ -23,7 +27,11 @@ func APIKeyMiddleware(expectedAPIKey string) gin.HandlerFunc {
 func DockerAvailabilityMiddleware(dockerClient *docker.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if dockerClient == nil {
-			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "Docker not available"})
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{
+				"data":    nil,
+				"success": false,
+				"error":   "Docker not available",
+			})
 			return
 		}
 		c.Next()

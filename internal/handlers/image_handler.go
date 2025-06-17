@@ -1,10 +1,17 @@
 package handlers
 
 import (
+	"bytes"
+	"fmt"
+	"io"
 	"net/http"
+	"strings"
+
+	"log/slog"
 
 	"github.com/gin-gonic/gin"
 	"github.com/ofkm/arcane-agent/internal/docker"
+	"github.com/ofkm/arcane-agent/internal/dto"
 )
 
 type ImageHandler struct {
@@ -58,6 +65,74 @@ func (h *ImageHandler) GetImage(c *gin.Context) {
 	})
 }
 
+func (h *ImageHandler) Pull(c *gin.Context) {
+	var req dto.ImagePullDto
+
+	// Read the raw body to log it
+	bodyBytes, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		slog.Error("Failed to read request body", "error", err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Failed to read request body",
+		})
+		return
+	}
+
+	// Restore the body for binding
+	c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
+	// Add debug logging
+	slog.Info("Pull request received",
+		"method", c.Request.Method,
+		"contentType", c.GetHeader("Content-Type"),
+		"bodyContent", string(bodyBytes))
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		slog.Error("Failed to bind JSON", "error", err.Error(), "rawBody", string(bodyBytes))
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Invalid request body: " + err.Error(),
+		})
+		return
+	}
+
+	slog.Info("Pull request parsed", "imageName", req.ImageName)
+
+	c.Writer.Header().Set("Content-Type", "application/x-json-stream")
+	c.Writer.Header().Set("Cache-Control", "no-cache")
+	c.Writer.Header().Set("Connection", "keep-alive")
+	c.Writer.Header().Set("X-Accel-Buffering", "no")
+
+	err = h.dockerClient.PullImageWithStream(c.Request.Context(), req.ImageName, c.Writer)
+
+	if err != nil {
+		if !c.Writer.Written() {
+			if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "manifest unknown") {
+				c.JSON(http.StatusNotFound, gin.H{
+					"success": false,
+					"error":   fmt.Sprintf("Failed to pull image '%s': %s. Ensure the image name and tag are correct and the image exists in the registry.", req.ImageName, err.Error()),
+				})
+			} else {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"success": false,
+					"error":   fmt.Sprintf("Failed to pull image '%s': %s", req.ImageName, err.Error()),
+				})
+			}
+		} else {
+			slog.Error("Error during image pull stream or post-stream operation", "imageName", req.ImageName, "error", err.Error())
+			fmt.Fprintf(c.Writer, `{"error": {"code": 500, "message": "Stream interrupted or post-stream operation failed: %s"}}`+"\n", strings.ReplaceAll(err.Error(), "\"", "'"))
+			if flusher, ok := c.Writer.(http.Flusher); ok {
+				flusher.Flush()
+			}
+		}
+		return
+	}
+
+	slog.Info("Image pull stream completed", "imageName", req.ImageName)
+}
+
+// Keep the existing CreateImage method for backward compatibility
 func (h *ImageHandler) CreateImage(c *gin.Context) {
 	var req struct {
 		FromImage string `json:"fromImage" binding:"required"`

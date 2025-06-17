@@ -7,8 +7,11 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/api/types/system"
+	"github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
 )
 
@@ -109,6 +112,43 @@ func (c *Client) PullImage(ctx context.Context, fromImage string, tag string, pl
 	return nil
 }
 
+// New method for streaming pull
+func (c *Client) PullImageStream(ctx context.Context, fromImage string, tag string, platform string) (io.ReadCloser, error) {
+	pullOptions := image.PullOptions{
+		Platform: platform,
+	}
+
+	imageRef := fromImage
+	if tag != "" {
+		imageRef = fmt.Sprintf("%s:%s", fromImage, tag)
+	}
+
+	reader, err := c.cli.ImagePull(ctx, imageRef, pullOptions)
+	if err != nil {
+		return nil, fmt.Errorf("failed to pull image: %w", err)
+	}
+
+	return reader, nil
+}
+
+func (c *Client) PullImageWithStream(ctx context.Context, imageName string, writer io.Writer) error {
+	pullOptions := image.PullOptions{}
+
+	reader, err := c.cli.ImagePull(ctx, imageName, pullOptions)
+	if err != nil {
+		return fmt.Errorf("failed to pull image: %w", err)
+	}
+	defer reader.Close()
+
+	// Stream the response directly to the writer
+	_, err = io.Copy(writer, reader)
+	if err != nil {
+		return fmt.Errorf("failed to stream pull response: %w", err)
+	}
+
+	return nil
+}
+
 func (c *Client) BuildImage(ctx context.Context, contextPath string, dockerfile string, tags []string, buildArgs map[string]string, target string, platform string) (string, error) {
 	// This is a simplified implementation
 	// In a real implementation, you'd need to create a tar archive of the build context
@@ -146,6 +186,63 @@ func (c *Client) PushImage(ctx context.Context, imageID string, tag string) erro
 	}
 
 	return nil
+}
+
+// Network methods
+func (c *Client) ListNetworks(ctx context.Context) ([]network.Summary, error) {
+	return c.cli.NetworkList(ctx, network.ListOptions{})
+}
+
+func (c *Client) GetNetwork(ctx context.Context, networkID string) (network.Inspect, error) {
+	return c.cli.NetworkInspect(ctx, networkID, network.InspectOptions{})
+}
+
+func (c *Client) CreateNetwork(ctx context.Context, name string, options network.CreateOptions) (network.CreateResponse, error) {
+	return c.cli.NetworkCreate(ctx, name, options)
+}
+
+func (c *Client) RemoveNetwork(ctx context.Context, networkID string) error {
+	return c.cli.NetworkRemove(ctx, networkID)
+}
+
+func (c *Client) ConnectContainerToNetwork(ctx context.Context, networkID string, containerID string, config *network.EndpointSettings) error {
+	return c.cli.NetworkConnect(ctx, networkID, containerID, config)
+}
+
+func (c *Client) DisconnectContainerFromNetwork(ctx context.Context, networkID string, containerID string, force bool) error {
+	return c.cli.NetworkDisconnect(ctx, networkID, containerID, force)
+}
+
+func (c *Client) PruneNetworks(ctx context.Context) (network.PruneReport, error) {
+	filterArgs := filters.NewArgs()
+	return c.cli.NetworksPrune(ctx, filterArgs)
+
+}
+
+// Volume methods
+func (c *Client) ListVolumes(ctx context.Context) (volume.ListResponse, error) {
+	return c.cli.VolumeList(ctx, volume.ListOptions{})
+}
+
+func (c *Client) GetVolume(ctx context.Context, volumeID string) (volume.Volume, error) {
+	return c.cli.VolumeInspect(ctx, volumeID)
+}
+
+func (c *Client) CreateVolume(ctx context.Context, options volume.CreateOptions) (volume.Volume, error) {
+	return c.cli.VolumeCreate(ctx, options)
+}
+
+func (c *Client) RemoveVolume(ctx context.Context, volumeID string, force bool) error {
+	return c.cli.VolumeRemove(ctx, volumeID, force)
+}
+
+func (c *Client) PruneVolumes(ctx context.Context) (volume.PruneReport, error) {
+	filterArgs := filters.NewArgs()
+	return c.cli.VolumesPrune(ctx, filterArgs)
+}
+
+func (c *Client) PruneVolumesWithFilters(ctx context.Context, filterArgs filters.Args) (volume.PruneReport, error) {
+	return c.cli.VolumesPrune(ctx, filterArgs)
 }
 
 func (c *Client) Close() error {

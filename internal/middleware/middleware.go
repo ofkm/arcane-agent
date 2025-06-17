@@ -7,7 +7,6 @@ import (
 	"github.com/ofkm/arcane-agent/internal/docker"
 )
 
-// APIKeyMiddleware for API key authentication
 func APIKeyMiddleware(expectedAPIKey string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		apiKey := c.GetHeader("X-API-Key")
@@ -23,7 +22,6 @@ func APIKeyMiddleware(expectedAPIKey string) gin.HandlerFunc {
 	}
 }
 
-// DockerAvailabilityMiddleware checks if Docker client is available
 func DockerAvailabilityMiddleware(dockerClient *docker.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if dockerClient == nil {

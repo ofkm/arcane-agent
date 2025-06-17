@@ -28,6 +28,8 @@ func NewRouter(cfg *config.Config, dockerClient *docker.Client) *gin.Engine {
 		setupContainerRoutes(api, containerHandler, dockerClient)
 		setupDockerRoutes(api, dockerHandler, dockerClient)
 		setupImageRoutes(api, imageHandler, dockerClient)
+		setupNetworkRoutes(api, handlers.NewNetworkHandler(dockerClient))
+		setupVolumeRoutes(api, handlers.NewVolumeHandler(dockerClient), dockerClient)
 	}
 
 	return router
@@ -66,8 +68,36 @@ func setupImageRoutes(api *gin.RouterGroup, imageHandler *handlers.ImageHandler,
 	images.Use(middleware.DockerAvailabilityMiddleware(dockerClient))
 	{
 		images.GET("", imageHandler.ListImages)
-		images.GET("/:id", imageHandler.GetImage)
 		images.POST("", imageHandler.CreateImage)
+		images.POST("/pull", imageHandler.Pull)
+		images.GET("/:id", imageHandler.GetImage)
 		images.DELETE("/:id", imageHandler.DeleteImage)
+		images.POST("/:id/tag", imageHandler.TagImage)
+		images.POST("/:id/push", imageHandler.PushImage)
+	}
+}
+
+func setupNetworkRoutes(router *gin.RouterGroup, networkHandler *handlers.NetworkHandler) {
+	networks := router.Group("/networks")
+	{
+		networks.GET("", networkHandler.ListNetworks)
+		networks.POST("", networkHandler.CreateNetwork)
+		networks.GET("/:id", networkHandler.GetNetwork)
+		networks.DELETE("/:id", networkHandler.DeleteNetwork)
+		networks.POST("/:id/connect", networkHandler.ConnectContainer)
+		networks.POST("/:id/disconnect", networkHandler.DisconnectContainer)
+		networks.POST("/prune", networkHandler.PruneNetworks)
+	}
+}
+
+func setupVolumeRoutes(api *gin.RouterGroup, volumeHandler *handlers.VolumeHandler, dockerClient *docker.Client) {
+	volumes := api.Group("/volumes")
+	volumes.Use(middleware.DockerAvailabilityMiddleware(dockerClient))
+	{
+		volumes.GET("", volumeHandler.ListVolumes)
+		volumes.POST("", volumeHandler.CreateVolume)
+		volumes.GET("/:id", volumeHandler.GetVolume)
+		volumes.DELETE("/:id", volumeHandler.DeleteVolume)
+		volumes.POST("/prune", volumeHandler.PruneVolumes)
 	}
 }

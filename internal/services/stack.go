@@ -248,7 +248,7 @@ func (s *StackService) ListStacks(ctx context.Context) ([]models.Stack, error) {
 		}
 
 		stackPath := filepath.Join(s.stacksDir, entry.Name())
-		folderName := fmt.Sprintf("%s-%d", s.sanitizeStackName(entry.Name()))
+		folderName := s.sanitizeStackName(entry.Name())
 		composeFile := s.findComposeFile(stackPath)
 		if composeFile == "" {
 			continue

@@ -73,157 +73,159 @@ func (s *StackService) CreateStack(ctx context.Context, name, composeContent str
 	return stack, nil
 }
 
-func (s *StackService) DeployStack(ctx context.Context, stackID string) error {
-	// Find stack directly by ID without calling ListStacks
-	stack, err := s.GetStackByID(ctx, stackID)
-	if err != nil {
-		return fmt.Errorf("stack not found: %w", err)
+func (s *StackService) DeployStack(ctx context.Context, stackName string) error {
+	stackPath := filepath.Join(s.stacksDir, stackName)
+
+	// Check if stack directory exists
+	if _, err := os.Stat(stackPath); os.IsNotExist(err) {
+		return fmt.Errorf("stack '%s' not found", stackName)
+	}
+
+	// Check if compose file exists
+	composeFile := s.findComposeFile(stackPath)
+	if composeFile == "" {
+		return fmt.Errorf("no compose file found in stack '%s'", stackName)
 	}
 
 	cmd := exec.CommandContext(ctx, "docker-compose", "up", "-d")
-	cmd.Dir = stack.Path
-
+	cmd.Dir = stackPath
 	cmd.Env = append(os.Environ(),
-		fmt.Sprintf("COMPOSE_PROJECT_NAME=%s", stack.Name),
+		fmt.Sprintf("COMPOSE_PROJECT_NAME=%s", stackName),
 	)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("failed to deploy stack: %w\nOutput: %s", err, string(output))
+		return fmt.Errorf("failed to deploy stack '%s': %w\nOutput: %s", stackName, err, string(output))
 	}
 
 	return nil
 }
 
-func (s *StackService) StopStack(ctx context.Context, stackID string) error {
-	stack, err := s.GetStackByID(ctx, stackID)
-	if err != nil {
-		return fmt.Errorf("stack not found: %w", err)
+func (s *StackService) StopStack(ctx context.Context, stackName string) error {
+	stackPath := filepath.Join(s.stacksDir, stackName)
+
+	if _, err := os.Stat(stackPath); os.IsNotExist(err) {
+		return fmt.Errorf("stack '%s' not found", stackName)
 	}
 
 	cmd := exec.CommandContext(ctx, "docker-compose", "stop")
-	cmd.Dir = stack.Path
+	cmd.Dir = stackPath
 	cmd.Env = append(os.Environ(),
-		fmt.Sprintf("COMPOSE_PROJECT_NAME=%s", stack.Name),
+		fmt.Sprintf("COMPOSE_PROJECT_NAME=%s", stackName),
 	)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("failed to stop stack: %w\nOutput: %s", err, string(output))
+		return fmt.Errorf("failed to stop stack '%s': %w\nOutput: %s", stackName, err, string(output))
 	}
 
 	return nil
 }
 
-func (s *StackService) DownStack(ctx context.Context, stackID string) error {
-	stack, err := s.GetStackByID(ctx, stackID)
-	if err != nil {
-		return fmt.Errorf("stack not found: %w", err)
+func (s *StackService) DownStack(ctx context.Context, stackName string) error {
+	stackPath := filepath.Join(s.stacksDir, stackName)
+
+	if _, err := os.Stat(stackPath); os.IsNotExist(err) {
+		return fmt.Errorf("stack '%s' not found", stackName)
 	}
 
 	cmd := exec.CommandContext(ctx, "docker-compose", "down")
-	cmd.Dir = stack.Path
+	cmd.Dir = stackPath
 	cmd.Env = append(os.Environ(),
-		fmt.Sprintf("COMPOSE_PROJECT_NAME=%s", stack.Name),
+		fmt.Sprintf("COMPOSE_PROJECT_NAME=%s", stackName),
 	)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("failed to down stack: %w\nOutput: %s", err, string(output))
+		return fmt.Errorf("failed to down stack '%s': %w\nOutput: %s", stackName, err, string(output))
 	}
 
 	return nil
 }
 
-func (s *StackService) RestartStack(ctx context.Context, stackID string) error {
-	stack, err := s.GetStackByID(ctx, stackID)
-	if err != nil {
-		return fmt.Errorf("stack not found: %w", err)
+func (s *StackService) RestartStack(ctx context.Context, stackName string) error {
+	stackPath := filepath.Join(s.stacksDir, stackName)
+
+	if _, err := os.Stat(stackPath); os.IsNotExist(err) {
+		return fmt.Errorf("stack '%s' not found", stackName)
 	}
 
 	cmd := exec.CommandContext(ctx, "docker-compose", "restart")
-	cmd.Dir = stack.Path
+	cmd.Dir = stackPath
 	cmd.Env = append(os.Environ(),
-		fmt.Sprintf("COMPOSE_PROJECT_NAME=%s", stack.Name),
+		fmt.Sprintf("COMPOSE_PROJECT_NAME=%s", stackName),
 	)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("failed to restart stack: %w\nOutput: %s", err, string(output))
+		return fmt.Errorf("failed to restart stack '%s': %w\nOutput: %s", stackName, err, string(output))
 	}
 
 	return nil
 }
 
-func (s *StackService) PullStackImages(ctx context.Context, stackID string) error {
-	stack, err := s.GetStackByID(ctx, stackID)
-	if err != nil {
-		return fmt.Errorf("stack not found: %w", err)
+func (s *StackService) PullStackImages(ctx context.Context, stackName string) error {
+	stackPath := filepath.Join(s.stacksDir, stackName)
+
+	if _, err := os.Stat(stackPath); os.IsNotExist(err) {
+		return fmt.Errorf("stack '%s' not found", stackName)
 	}
 
 	cmd := exec.CommandContext(ctx, "docker-compose", "pull")
-	cmd.Dir = stack.Path
+	cmd.Dir = stackPath
 	cmd.Env = append(os.Environ(),
-		fmt.Sprintf("COMPOSE_PROJECT_NAME=%s", stack.Name),
+		fmt.Sprintf("COMPOSE_PROJECT_NAME=%s", stackName),
 	)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("failed to pull stack images: %w\nOutput: %s", err, string(output))
+		return fmt.Errorf("failed to pull stack images '%s': %w\nOutput: %s", stackName, err, string(output))
 	}
 
 	return nil
 }
 
-func (s *StackService) RedeployStack(ctx context.Context, stackID string, profiles []string, envOverrides map[string]string) error {
-	if err := s.PullStackImages(ctx, stackID); err != nil {
-		fmt.Printf("Warning: failed to pull images: %v\n", err)
+func (s *StackService) RedeployStack(ctx context.Context, stackName string, profiles []string, envOverrides map[string]string) error {
+	if err := s.PullStackImages(ctx, stackName); err != nil {
+		fmt.Printf("Warning: failed to pull images for stack '%s': %v\n", stackName, err)
 	}
 
-	if err := s.StopStack(ctx, stackID); err != nil {
-		return fmt.Errorf("failed to stop stack for redeploy: %w", err)
+	if err := s.StopStack(ctx, stackName); err != nil {
+		return fmt.Errorf("failed to stop stack '%s' for redeploy: %w", stackName, err)
 	}
 
-	return s.DeployStack(ctx, stackID)
+	return s.DeployStack(ctx, stackName)
 }
 
-func (s *StackService) DestroyStack(ctx context.Context, stackID string, removeFiles, removeVolumes bool) error {
-	stacks, err := s.ListStacks(ctx)
-	if err != nil {
-		return err
+func (s *StackService) DestroyStack(ctx context.Context, stackName string, removeFiles, removeVolumes bool) error {
+	stackPath := filepath.Join(s.stacksDir, stackName)
+
+	if _, err := os.Stat(stackPath); os.IsNotExist(err) {
+		return fmt.Errorf("stack '%s' not found", stackName)
 	}
 
-	var stack *models.Stack
-	for _, st := range stacks {
-		if st.ID == stackID {
-			stack = &st
-			break
-		}
+	// Try to bring down the stack first
+	if err := s.DownStack(ctx, stackName); err != nil {
+		fmt.Printf("Warning: failed to bring down stack '%s': %v\n", stackName, err)
 	}
 
-	if stack == nil {
-		return fmt.Errorf("stack not found")
-	}
-
-	if err := s.DownStack(ctx, stackID); err != nil {
-		fmt.Printf("Warning: failed to bring down stack: %v\n", err)
-	}
-
+	// Remove volumes if requested
 	if removeVolumes {
 		cmd := exec.CommandContext(ctx, "docker-compose", "down", "-v")
-		cmd.Dir = stack.Path
+		cmd.Dir = stackPath
 		cmd.Env = append(os.Environ(),
-			fmt.Sprintf("COMPOSE_PROJECT_NAME=%s", stack.Name),
+			fmt.Sprintf("COMPOSE_PROJECT_NAME=%s", stackName),
 		)
 
 		if output, err := cmd.CombinedOutput(); err != nil {
-			fmt.Printf("Warning: failed to remove volumes: %v\nOutput: %s\n", err, string(output))
+			fmt.Printf("Warning: failed to remove volumes for stack '%s': %v\nOutput: %s\n", stackName, err, string(output))
 		}
 	}
 
+	// Remove files if requested
 	if removeFiles {
-		if err := os.RemoveAll(stack.Path); err != nil {
-			return fmt.Errorf("failed to remove stack files: %w", err)
+		if err := os.RemoveAll(stackPath); err != nil {
+			return fmt.Errorf("failed to remove stack files for '%s': %w", stackName, err)
 		}
 	}
 
@@ -248,18 +250,15 @@ func (s *StackService) ListStacks(ctx context.Context) ([]models.Stack, error) {
 		}
 
 		stackPath := filepath.Join(s.stacksDir, entry.Name())
-		folderName := s.sanitizeStackName(entry.Name())
 		composeFile := s.findComposeFile(stackPath)
 		if composeFile == "" {
 			continue
 		}
 
-		// Read stack metadata if exists
-		metadataPath := filepath.Join(stackPath, ".stack-metadata.json")
+		// Use folder name as both ID and Name - simple and consistent
 		stack := models.Stack{
-			ID:           entry.Name(), // Use directory name as ID for now
-			Name:         entry.Name(),
-			DirName:      &folderName,
+			ID:           entry.Name(), // Folder name is the ID
+			Name:         entry.Name(), // Folder name is also the display name
 			Path:         stackPath,
 			Status:       models.StackStatusUnknown,
 			ServiceCount: 0,
@@ -268,20 +267,24 @@ func (s *StackService) ListStacks(ctx context.Context) ([]models.Stack, error) {
 			UpdatedAt:    time.Now(),
 		}
 
-		// Try to read metadata
+		// Try to read metadata for additional info (but ID stays as folder name)
+		metadataPath := filepath.Join(stackPath, ".stack-metadata.json")
 		if metadataBytes, err := os.ReadFile(metadataPath); err == nil {
 			var metadata struct {
-				ID        string    `json:"id"`
 				Name      string    `json:"name"`
 				CreatedAt time.Time `json:"createdAt"`
 			}
 			if err := json.Unmarshal(metadataBytes, &metadata); err == nil {
-				stack.ID = metadata.ID
-				stack.Name = metadata.Name
-				stack.CreatedAt = metadata.CreatedAt
+				if metadata.Name != "" {
+					stack.Name = metadata.Name // Use metadata name if available
+				}
+				if !metadata.CreatedAt.IsZero() {
+					stack.CreatedAt = metadata.CreatedAt
+				}
 			}
 		}
 
+		// Get services and status
 		services, err := s.getStackServicesDirectly(ctx, &stack)
 		if err == nil {
 			stack.ServiceCount = len(services)
@@ -345,19 +348,44 @@ func (s *StackService) getStackServicesDirectly(ctx context.Context, stack *mode
 	return servicesFromFile, nil
 }
 
-func (s *StackService) GetStackByID(ctx context.Context, id string) (*models.Stack, error) {
-	stacks, err := s.ListStacks(ctx)
-	if err != nil {
-		return nil, err
+func (s *StackService) GetStackByID(ctx context.Context, stackName string) (*models.Stack, error) {
+	stackPath := filepath.Join(s.stacksDir, stackName)
+
+	if _, err := os.Stat(stackPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("stack '%s' not found", stackName)
 	}
 
-	for _, stack := range stacks {
-		if stack.ID == id {
-			return &stack, nil
+	composeFile := s.findComposeFile(stackPath)
+	if composeFile == "" {
+		return nil, fmt.Errorf("no compose file found in stack '%s'", stackName)
+	}
+
+	stack := &models.Stack{
+		ID:        stackName,
+		Name:      stackName,
+		Path:      stackPath,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	// Try to read metadata
+	metadataPath := filepath.Join(stackPath, ".stack-metadata.json")
+	if metadataBytes, err := os.ReadFile(metadataPath); err == nil {
+		var metadata struct {
+			Name      string    `json:"name"`
+			CreatedAt time.Time `json:"createdAt"`
+		}
+		if err := json.Unmarshal(metadataBytes, &metadata); err == nil {
+			if metadata.Name != "" {
+				stack.Name = metadata.Name
+			}
+			if !metadata.CreatedAt.IsZero() {
+				stack.CreatedAt = metadata.CreatedAt
+			}
 		}
 	}
 
-	return nil, fmt.Errorf("stack not found")
+	return stack, nil
 }
 
 func (s *StackService) UpdateStack(ctx context.Context, stack *models.Stack) (*models.Stack, error) {

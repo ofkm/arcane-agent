@@ -245,6 +245,37 @@ func (c *Client) PruneVolumesWithFilters(ctx context.Context, filterArgs filters
 	return c.cli.VolumesPrune(ctx, filterArgs)
 }
 
+func (c *Client) GetVolumeUsage(ctx context.Context, name string) (bool, []string, error) {
+	if _, err := c.cli.VolumeInspect(ctx, name); err != nil {
+		return false, nil, fmt.Errorf("volume not found: %w", err)
+	}
+
+	containers, err := c.cli.ContainerList(ctx, container.ListOptions{All: true})
+	if err != nil {
+		return false, nil, fmt.Errorf("failed to list containers: %w", err)
+	}
+
+	inUse := false
+	var usingContainers []string
+
+	for _, container := range containers {
+		containerInfo, err := c.cli.ContainerInspect(ctx, container.ID)
+		if err != nil {
+			continue
+		}
+
+		for _, mount := range containerInfo.Mounts {
+			if mount.Type == "volume" && mount.Name == name {
+				inUse = true
+				usingContainers = append(usingContainers, container.ID)
+				break
+			}
+		}
+	}
+
+	return inUse, usingContainers, nil
+}
+
 func (c *Client) Close() error {
 	if c.cli != nil {
 		return c.cli.Close()

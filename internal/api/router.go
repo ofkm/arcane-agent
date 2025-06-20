@@ -97,6 +97,7 @@ func setupVolumeRoutes(api *gin.RouterGroup, volumeHandler *handlers.VolumeHandl
 		volumes.GET("", volumeHandler.ListVolumes)
 		volumes.POST("", volumeHandler.CreateVolume)
 		volumes.GET("/:id", volumeHandler.GetVolume)
+		volumes.GET("/:id/usage", volumeHandler.GetVolumeUsage)
 		volumes.DELETE("/:id", volumeHandler.DeleteVolume)
 		volumes.POST("/prune", volumeHandler.PruneVolumes)
 	}

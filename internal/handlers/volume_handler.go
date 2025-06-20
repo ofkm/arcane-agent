@@ -57,6 +57,28 @@ func (h *VolumeHandler) GetVolume(c *gin.Context) {
 	})
 }
 
+func (h *VolumeHandler) GetVolumeUsage(c *gin.Context) {
+	volumeID := c.Param("id")
+	inUse, usingContainers, err := h.dockerClient.GetVolumeUsage(c.Request.Context(), volumeID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"data":    nil,
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"success": true,
+		"data": gin.H{
+			"inUse":      inUse,
+			"containers": usingContainers,
+		},
+	})
+
+}
+
 func (h *VolumeHandler) CreateVolume(c *gin.Context) {
 	var req struct {
 		Name       string            `json:"name"`

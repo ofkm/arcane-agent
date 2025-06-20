@@ -79,10 +79,8 @@ func (h *ImageHandler) Pull(c *gin.Context) {
 		return
 	}
 
-	// Restore the body for binding
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
-	// Add debug logging
 	slog.Info("Pull request received",
 		"method", c.Request.Method,
 		"contentType", c.GetHeader("Content-Type"),

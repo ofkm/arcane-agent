@@ -6,6 +6,7 @@ import (
 	"github.com/ofkm/arcane-agent/internal/docker"
 	"github.com/ofkm/arcane-agent/internal/handlers"
 	"github.com/ofkm/arcane-agent/internal/middleware"
+	"github.com/ofkm/arcane-agent/internal/services"
 )
 
 func NewRouter(cfg *config.Config, dockerClient *docker.Client) *gin.Engine {
@@ -21,6 +22,7 @@ func NewRouter(cfg *config.Config, dockerClient *docker.Client) *gin.Engine {
 	containerHandler := handlers.NewContainerHandler(dockerClient)
 	dockerHandler := handlers.NewDockerHandler(dockerClient)
 	imageHandler := handlers.NewImageHandler(dockerClient)
+	stackHandler := handlers.NewStackHandler(services.NewStackService())
 
 	api := router.Group("/api")
 	{
@@ -28,6 +30,7 @@ func NewRouter(cfg *config.Config, dockerClient *docker.Client) *gin.Engine {
 		setupContainerRoutes(api, containerHandler, dockerClient)
 		setupDockerRoutes(api, dockerHandler, dockerClient)
 		setupImageRoutes(api, imageHandler, dockerClient)
+		setupStackRoutes(api, stackHandler, dockerClient)
 		setupNetworkRoutes(api, handlers.NewNetworkHandler(dockerClient))
 		setupVolumeRoutes(api, handlers.NewVolumeHandler(dockerClient), dockerClient)
 	}
@@ -74,6 +77,31 @@ func setupImageRoutes(api *gin.RouterGroup, imageHandler *handlers.ImageHandler,
 		images.DELETE("/:id", imageHandler.DeleteImage)
 		images.POST("/:id/tag", imageHandler.TagImage)
 		images.POST("/:id/push", imageHandler.PushImage)
+	}
+}
+
+// Stack routes
+func setupStackRoutes(api *gin.RouterGroup, stackHandler *handlers.StackHandler, dockerClient *docker.Client) {
+	stacks := api.Group("/stacks")
+	stacks.Use(middleware.DockerAvailabilityMiddleware(dockerClient))
+	{
+		stacks.GET("", stackHandler.ListStacks)
+		stacks.POST("", stackHandler.CreateStack)
+		stacks.GET("/:id", stackHandler.GetStack)
+		stacks.PUT("/:id", stackHandler.UpdateStack)
+		stacks.DELETE("/:id", stackHandler.DeleteStack)
+		stacks.POST("/:id/start", stackHandler.StartStack)
+		stacks.POST("/:id/stop", stackHandler.StopStack)
+		stacks.POST("/:id/restart", stackHandler.RestartStack)
+		stacks.POST("/:id/redeploy", stackHandler.RedeployStack)
+		stacks.POST("/:id/down", stackHandler.DownStack)
+		stacks.DELETE("/:id/destroy", stackHandler.DestroyStack)
+		stacks.POST("/:id/pull", stackHandler.PullStack)
+		stacks.POST("/:id/deploy", stackHandler.DeployStack)
+		stacks.GET("/:id/services", stackHandler.GetStackServices)
+		stacks.POST("/:id/pull-images", stackHandler.PullImages)
+		stacks.POST("/convert", stackHandler.ConvertDockerRun)
+		stacks.GET("/:id/logs/stream", stackHandler.GetStackLogsStream)
 	}
 }
 

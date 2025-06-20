@@ -53,6 +53,9 @@ func setupContainerRoutes(api *gin.RouterGroup, containerHandler *handlers.Conta
 		containers.POST("/:id/start", containerHandler.StartContainer)
 		containers.POST("/:id/stop", containerHandler.StopContainer)
 		containers.POST("/:id/restart", containerHandler.RestartContainer)
+		containers.GET("/:id/stats", containerHandler.GetStats)
+		containers.GET("/:id/stats/stream", containerHandler.GetStatsStream)
+
 	}
 }
 

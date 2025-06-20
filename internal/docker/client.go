@@ -276,6 +276,10 @@ func (c *Client) GetVolumeUsage(ctx context.Context, name string) (bool, []strin
 	return inUse, usingContainers, nil
 }
 
+func (c *Client) ContainerStats(ctx context.Context, containerID string, stream bool) (container.StatsResponseReader, error) {
+	return c.cli.ContainerStats(ctx, containerID, stream)
+}
+
 func (c *Client) Close() error {
 	if c.cli != nil {
 		return c.cli.Close()

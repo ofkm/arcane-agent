@@ -35,5 +35,5 @@ FROM docker:28.2.2-cli-alpine3.21 AS runtime
 # Copy your built binary from builder stage
 COPY --from=builder /app/arcane-agent /arcane-agent
 
-EXPOSE 8080
+EXPOSE 3552
 ENTRYPOINT ["/arcane-agent"]

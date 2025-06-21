@@ -3,39 +3,53 @@ package config
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
-	"time"
+
+	"github.com/ofkm/arcane-agent/internal/version"
 )
 
 type Config struct {
-	ArcaneHost      string        `json:"arcane_host"`
-	ArcanePort      int           `json:"arcane_port"`
-	AgentID         string        `json:"agent_id"`
-	TLSEnabled      bool          `json:"tls_enabled"`
-	ReconnectDelay  time.Duration `json:"reconnect_delay"`
-	HeartbeatRate   time.Duration `json:"heartbeat_rate"`
-	ComposeBasePath string        `json:"compose_base_path"`
+	// Agent identity
+	AgentID string `json:"agent_id"`
+	Version string `json:"version"`
+
+	// Agent API Server
+	AgentListenAddress string `json:"agent_listen_address"`
+	AgentPort          int    `json:"agent_port"`
+	APIKey             string `json:"api_key"`
 }
 
 func Load() (*Config, error) {
-	cfg := &Config{
-		ArcaneHost:      getEnv("ARCANE_HOST", "localhost"),
-		ArcanePort:      getEnvInt("ARCANE_PORT", 3000),
-		TLSEnabled:      getEnvBool("TLS_ENABLED", false),
-		ReconnectDelay:  getEnvDuration("RECONNECT_DELAY", 5*time.Second),
-		HeartbeatRate:   getEnvDuration("HEARTBEAT_RATE", 30*time.Second),
-		ComposeBasePath: getEnv("COMPOSE_BASE_PATH", "data/agent/compose-projects"),
-	}
-
-	// Get or generate agent ID
+	// Get or create agent ID
 	agentID, err := getOrCreateAgentID()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get agent ID: %w", err)
 	}
-	cfg.AgentID = agentID
+
+	cfg := &Config{
+		AgentID:            agentID,
+		Version:            version.GetVersion(),
+		AgentListenAddress: getEnv("AGENT_LISTEN_ADDRESS", "0.0.0.0"),
+		AgentPort:          getEnvInt("AGENT_PORT", 3552),
+		APIKey:             getEnv("API_KEY", ""),
+	}
+
+	// Validate configuration
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("config validation failed: %w", err)
+	}
 
 	return cfg, nil
+}
+
+func (c *Config) Validate() error {
+	if c.AgentPort <= 0 || c.AgentPort > 65535 {
+		return fmt.Errorf("invalid AGENT_PORT: %d", c.AgentPort)
+	}
+	if c.AgentID == "" {
+		return fmt.Errorf("AGENT_ID cannot be empty")
+	}
+	return nil
 }
 
 func getEnv(key, defaultValue string) string {
@@ -54,73 +68,16 @@ func getEnvInt(key string, defaultValue int) int {
 	return defaultValue
 }
 
-func getEnvDuration(key string, defaultValue time.Duration) time.Duration {
-	if value := os.Getenv(key); value != "" {
-		if duration, err := time.ParseDuration(value); err == nil {
-			return duration
-		}
-	}
-	return defaultValue
-}
-
-func getEnvBool(key string, defaultValue bool) bool {
-	if value := os.Getenv(key); value != "" {
-		if boolValue, err := strconv.ParseBool(value); err == nil {
-			return boolValue
-		}
-	}
-	return defaultValue
-}
-
 func getOrCreateAgentID() (string, error) {
-	// First check if AGENT_ID is set in environment
 	if agentID := os.Getenv("AGENT_ID"); agentID != "" {
 		return agentID, nil
 	}
 
-	// Try to load from file
-	agentIDFile := getAgentIDFile()
-	if data, err := os.ReadFile(agentIDFile); err == nil {
-		agentID := string(data)
-		if agentID != "" {
-			return agentID, nil
-		}
-	}
-
-	// Generate new agent ID and save it
-	agentID := generateAgentID()
-	if err := saveAgentID(agentID); err != nil {
-		return "", err
-	}
-	return agentID, nil
-}
-
-func generateAgentID() string {
-	hostname, _ := os.Hostname()
-	return fmt.Sprintf("agent-%s-%d", hostname, time.Now().Unix())
-}
-
-func getAgentIDFile() string {
-	// Store in user's home directory or current directory
-	homeDir, err := os.UserHomeDir()
+	// Generate a simple agent ID based on hostname
+	hostname, err := os.Hostname()
 	if err != nil {
-		return ".agent_id"
-	}
-	return filepath.Join(homeDir, ".arcane-agent", "agent_id")
-}
-
-func saveAgentID(agentID string) error {
-	agentIDFile := getAgentIDFile()
-
-	// Create directory if it doesn't exist
-	dir := filepath.Dir(agentIDFile)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return err
+		hostname = "unknown"
 	}
 
-	// Write agent ID to file
-	if err := os.WriteFile(agentIDFile, []byte(agentID), 0644); err != nil {
-		return err
-	}
-	return nil
+	return fmt.Sprintf("arcane-agent-%s", hostname), nil
 }

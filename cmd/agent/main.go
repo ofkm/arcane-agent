@@ -14,7 +14,7 @@ import (
 func main() {
 	// Load .env file if it exists
 	if err := godotenv.Load(); err != nil {
-		log.Printf("No .env file found: %v", err)
+		log.Printf("No .env file found (this is okay): %v", err)
 	}
 
 	cfg, err := config.Load()
@@ -22,8 +22,8 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	// Create and start agent
-	agent := agent.New(cfg)
+	// Create agent
+	a := agent.New(cfg)
 
 	// Handle shutdown signals
 	sigChan := make(chan os.Signal, 1)
@@ -32,11 +32,11 @@ func main() {
 	go func() {
 		<-sigChan
 		log.Printf("Received shutdown signal")
-		agent.Stop()
+		a.Stop()
 	}()
 
 	// Start agent (blocks until shutdown)
-	if err := agent.Start(); err != nil {
+	if err := a.Start(); err != nil {
 		log.Fatalf("Agent failed: %v", err)
 	}
 

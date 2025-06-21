@@ -2,76 +2,132 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"net/http"
 	"sync"
 	"time"
 
+	"github.com/ofkm/arcane-agent/internal/api"
 	"github.com/ofkm/arcane-agent/internal/config"
 	"github.com/ofkm/arcane-agent/internal/docker"
-	"github.com/ofkm/arcane-agent/internal/tasks"
 )
 
 type Agent struct {
 	config       *config.Config
-	httpClient   *HTTPClient
 	dockerClient *docker.Client
-	taskManager  *tasks.Manager
+	apiServer    *http.Server
 
-	ctx    context.Context
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
-
+	ctx       context.Context
+	cancel    context.CancelFunc
+	wg        sync.WaitGroup
 	shutdown  chan struct{}
 	startTime time.Time
+
+	status string
+	mu     sync.RWMutex
 }
 
 func New(cfg *config.Config) *Agent {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	dockerClient := docker.NewClient()
-	taskManager := tasks.NewManager(dockerClient, cfg)
-	httpClient := NewHTTPClient(cfg, taskManager)
+	dockerClient, err := docker.NewClient()
+	if err != nil {
+		log.Printf("Warning: Docker client creation failed: %v", err)
+		dockerClient = nil
+	}
 
 	return &Agent{
 		config:       cfg,
-		httpClient:   httpClient,
 		dockerClient: dockerClient,
-		taskManager:  taskManager,
 		ctx:          ctx,
 		cancel:       cancel,
 		shutdown:     make(chan struct{}),
 		startTime:    time.Now(),
+		status:       "initializing",
 	}
 }
 
 func (a *Agent) Start() error {
-	log.Printf("Starting Arcane Agent %s", a.config.AgentID)
+	a.setStatus("starting")
+	log.Printf("Starting Arcane Agent %s (version: %s)", a.config.AgentID, a.config.Version)
 
-	// Start HTTP client (handles registration, heartbeat, and task polling)
+	// Validate Docker
+	if a.dockerClient == nil || !a.dockerClient.IsDockerAvailable() {
+		log.Printf("Warning: Docker is not available")
+	} else {
+		log.Printf("Docker connection successful")
+	}
+
+	// Setup API server
+	router := api.NewRouter(a.config, a.dockerClient)
+	listenAddr := fmt.Sprintf("%s:%d", a.config.AgentListenAddress, a.config.AgentPort)
+
+	a.apiServer = &http.Server{
+		Addr:    listenAddr,
+		Handler: router,
+	}
+
+	// Start API server
 	a.wg.Add(1)
 	go func() {
 		defer a.wg.Done()
-		if err := a.httpClient.Start(a.ctx); err != nil {
-			log.Printf("HTTP client error: %v", err)
+		log.Printf("Agent API server listening on %s", listenAddr)
+		a.setStatus("running")
+
+		if err := a.apiServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("Agent API server error: %v", err)
 		}
+		log.Println("Agent API server shut down.")
 	}()
 
-	// Wait for shutdown signal
+	log.Printf("Agent started successfully")
+
+	// Wait for shutdown
 	<-a.shutdown
 
 	log.Printf("Shutting down agent...")
+	a.setStatus("stopping")
+
+	// Graceful shutdown
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+
+	if err := a.apiServer.Shutdown(shutdownCtx); err != nil {
+		log.Printf("Agent API server shutdown error: %v", err)
+	}
+
 	a.cancel()
 	a.wg.Wait()
+	a.setStatus("stopped")
 
+	if a.dockerClient != nil {
+		a.dockerClient.Close()
+	}
+
+	log.Println("Agent stopped gracefully.")
 	return nil
 }
 
 func (a *Agent) Stop() {
+	log.Println("Stop called on agent.")
 	select {
 	case <-a.shutdown:
-		// Already closed
 		return
 	default:
 		close(a.shutdown)
 	}
+}
+
+func (a *Agent) GetStatus() string {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.status
+}
+
+func (a *Agent) setStatus(status string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.status = status
+	log.Printf("Agent status: %s", status)
 }
